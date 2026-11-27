@@ -48,6 +48,10 @@ Units are `ms` for CPU, `byte` for allocations and `count` for calls. Relationsh
 
 Sequence starts at 1 and increases per source. Retrying the latest accepted sequence with the same batch is idempotent. A conflicting replay is rejected. Following overload, retry the unaccepted batch within the producer's bounded queue. If it must be dropped, skip its sequence and report the resulting gap on the next accepted batch. An exact cumulative interval may span missed checkpoints only when coverage and endpoints are both known. Do not split such a count into fabricated shorter windows.
 
+Publish observations for methods and unresolved buckets. The host derives module totals. Node ID `$unresolved` is reserved for the host's overflow bucket. Include topology upserts again when referencing IDs that may have been skipped after a lost or truncated batch. The registration response advertises `maxBatchBytes`, `maxNodes`, `maxRelationships`, `minIntervalMs` and `inactivityMs` under `limits`.
+
 ## Local boundaries
 
 Bind explicitly to `127.0.0.1`, validate the actual Host authority, and reject cross-origin mutations. Protect browser control with a per-launch UI session and same-origin anti-CSRF mechanism. Producer credentials cannot issue browser control commands. The browser gets latest accepted full snapshots over same-origin SSE. Browser snapshots never include ingress credentials or raw diagnostic events. Distribute the producer endpoint and credential over a local process-owned channel for first-party connectors. The operator can authorize a third-party connector explicitly.
+
+The browser listens on `GET /api/view/v1/events`. Each `snapshot` event contains a full snapshot with `sessionId` and per-session `version`. Treat a different `sessionId` as a replacement even when the version resets. Reconnection receives current state. `gaps` counts discontinuities seen since registration.

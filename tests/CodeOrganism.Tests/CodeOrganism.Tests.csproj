@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CodeOrganism.Protocol\CodeOrganism.Protocol.csproj" />
+    <ProjectReference Include="..\..\src\CodeOrganism.Host\CodeOrganism.Host.csproj" />
   </ItemGroup>
 
 </Project>

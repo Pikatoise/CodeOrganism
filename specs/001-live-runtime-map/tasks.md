@@ -11,9 +11,9 @@
 ## Phase 2: Foundational
 
 - [X] T004 Define v1 messages and field validation in `src/CodeOrganism.Protocol/ConnectorMessages.cs` and add wire tests in `tests/CodeOrganism.Tests/ConnectorMessagesTests.cs`. See [Session](data-model.md#session) (`Session.id`, `Session.source`, `Session.capabilities`, `Session.limits`), [Node](data-model.md#node) (`Node.id`, `Node.kind`, `Node.label`, `Node.library`), [Relationship](data-model.md#relationship) (`Relationship.identity`) and [Measurement](data-model.md#measurement) (`Measurement.interval`, `Measurement.metric`, `Measurement.value`, `Measurement.quality`, `Measurement.loss`).
-- [ ] T005 Implement authenticated loopback ingress, admission limits, retries, source exclusivity and lifecycle in `src/CodeOrganism.Host/ConnectorEndpoints.cs` and `src/CodeOrganism.Host/SessionStore.cs`. See [Session](data-model.md#session) (`Session.id`, `Session.state`, `Session.limits`) and [contract](contracts/connector-v1.md).
-- [ ] T006 Implement metric rollups and monotonic latest-snapshot publishing in `src/CodeOrganism.Host/SnapshotStream.cs`. See [Measurement](data-model.md#measurement) (`Measurement.attribution`, `Measurement.loss`) and [View snapshot](data-model.md#view-snapshot) (`Snapshot.version`).
-- [ ] T007 Implement the reusable publisher and bounded resend behavior in `src/CodeOrganism.Protocol/ConnectorClient.cs`. Verify lifecycle conflicts, duplicate and lost batch behavior, and slow browser recovery in `tests/CodeOrganism.Tests/SessionStoreTests.cs`.
+- [X] T005 Implement authenticated loopback ingress, admission limits, retries, source exclusivity and lifecycle in `src/CodeOrganism.Host/ConnectorEndpoints.cs` and `src/CodeOrganism.Host/SessionStore.cs`. See [Session](data-model.md#session) (`Session.id`, `Session.state`, `Session.limits`) and [contract](contracts/connector-v1.md).
+- [X] T006 Implement metric rollups and monotonic latest-snapshot publishing in `src/CodeOrganism.Host/SnapshotStream.cs`. See [Measurement](data-model.md#measurement) (`Measurement.attribution`, `Measurement.loss`) and [View snapshot](data-model.md#view-snapshot) (`Snapshot.version`).
+- [X] T007 Implement the reusable publisher and bounded resend behavior in `src/CodeOrganism.Protocol/ConnectorClient.cs`. Verify lifecycle conflicts, duplicate and lost batch behavior, and slow browser recovery in `tests/CodeOrganism.Tests/SessionStoreTests.cs`.
 
 ## Phase 3: US1 - Find the source of CPU load (P1)
 
