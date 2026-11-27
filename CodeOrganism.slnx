@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Workload.Console/Workload.Console.csproj" />
+    <Project Path="samples/Workload.Web/Workload.Web.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/CodeOrganism.Connector.DotNet/CodeOrganism.Connector.DotNet.csproj" />
     <Project Path="src/CodeOrganism.Host/CodeOrganism.Host.csproj" />

@@ -18,4 +18,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CodeOrganism.Connector.DotNet\CodeOrganism.Connector.DotNet.csproj" />
+    <ProjectReference Include="..\..\samples\Workload.Console\Workload.Console.csproj" />
+  </ItemGroup>
+
 </Project>

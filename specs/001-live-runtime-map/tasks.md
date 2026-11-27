@@ -21,8 +21,8 @@
 
 ### CPU PoC
 
-- [ ] T008 [P] [US1] Create deterministic busy/wait and transition timing scenarios in `samples/Workload.Console/Program.cs` and `samples/Workload.Web/Program.cs`.
-- [ ] T009 [P] [US1] Spike real-time ETW on a warm target in `src/CodeOrganism.Connector.DotNet/CpuCollector.cs`. Test privilege, live managed name resolution, process identity and sampling latency in `tests/CodeOrganism.Windows.Tests/CpuAttachTests.cs`.
+- [X] T008 [P] [US1] Create deterministic busy/wait and transition timing scenarios in `samples/Workload.Console/Program.cs` and `samples/Workload.Web/Program.cs`.
+- [X] T009 [P] [US1] Spike real-time ETW on a warm target in `src/CodeOrganism.Connector.DotNet/CpuCollector.cs`. Test privilege, live managed name resolution, process identity and sampling latency in `tests/CodeOrganism.Windows.Tests/CpuAttachTests.cs`.
 - [ ] T010 [US1] Convert CPU samples and observed adjacencies to common batches in `src/CodeOrganism.Connector.DotNet/ObservationPublisher.cs`. Implement exclusive attribution and stable IDs under [Node](data-model.md#node) and [Measurement](data-model.md#measurement).
 - [ ] T011 [US1] Consume live snapshots and render an organic CPU map in `src/web/src/main.ts` and `src/web/src/graph/map.ts`.
 - [ ] T012 [US1] Run the CPU PoC gate, settle the normal benchmark profile and record results in `specs/001-live-runtime-map/validation/cpu-poc.md`. If latency, attribution or overhead fail, revise the collection approach within this gate and rerun before proceeding to the CPU MVP slice.
