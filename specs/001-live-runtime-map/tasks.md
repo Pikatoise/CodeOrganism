@@ -50,7 +50,7 @@
 - [X] T021 [P] [US3] Implement the opt-in checkpoint provider in `src/CodeOrganism.CallProbes/EntryCounters.cs` and add concurrent, recursive and throwing methods in `samples/Workload.Console/CallScenario.cs`.
 - [X] T022 [US3] Consume checkpoint deltas and publish covered counts in `src/CodeOrganism.Connector.DotNet/CallCollector.cs` and `src/CodeOrganism.Connector.DotNet/ObservationPublisher.cs`. Use the [Measurement](data-model.md#measurement) rules for interval, quality and coverage.
 - [X] T023 [US3] Implement call glow and combined display with explicit ranking metric in `src/web/src/graph/metrics.ts` and `src/web/src/inspector.ts`.
-- [ ] T024 [US3] Validate exact totals, partial windows, combined signals and both widths in `tests/CodeOrganism.Windows.Tests/CallProbeTests.cs` and `tests/browser/combined-map.spec.ts`. Record probe overhead and the qualified workload in `specs/001-live-runtime-map/validation/call-probes.md`.
+- [X] T024 [US3] Validate exact totals, partial windows, combined signals and both widths in `tests/CodeOrganism.Windows.Tests/CallProbeTests.cs` and `tests/browser/combined-map.spec.ts`. Record probe overhead and the qualified workload in `specs/001-live-runtime-map/validation/call-probes.md`.
 
 ## Phase 6: US4 - Publish from another connector (P4)
 

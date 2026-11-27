@@ -22,6 +22,7 @@ public static class ObservationPublisher
         RegisteredSession? session = collect is null && !includeAllocations ? await RegisterAsync(false, stop) : null;
         var reason = EndReason.ProducerError;
         var cadence = Math.Max(200, session?.Limits.MinIntervalMs ?? 0);
+        long? lastAccepted = null;
         try
         {
             var result = collect is null
@@ -55,8 +56,15 @@ public static class ObservationPublisher
         {
             session ??= await RegisterAsync(batch.Loss.Any(x => x.Metric == Metric.Calls) ||
                 batch.Measurements.Any(x => x.Metric == Metric.Calls), active);
+            if (lastAccepted is { } accepted)
+            {
+                // Private-pipe frames can queue while an HTTP request is retried.
+                var wait = TimeSpan.FromMilliseconds(session.Limits.MinIntervalMs + 15) - Stopwatch.GetElapsedTime(accepted);
+                if (wait > TimeSpan.Zero) await Task.Delay(wait, active);
+            }
             var published = await client.PublishAsync(session.SessionId, batch, active);
-            if (!published.IsSuccess && published.Status != HttpStatusCode.TooManyRequests && (int)published.Status < 500)
+            if (published.IsSuccess) lastAccepted = Stopwatch.GetTimestamp();
+            else if (published.Status != HttpStatusCode.TooManyRequests && (int)published.Status < 500)
                 throw ConnectionError(published);
         }
 
@@ -222,13 +230,14 @@ public sealed class CpuBatchBuffer(long epochMs, ManagedCodeIndex? code = null, 
             {
                 // Keep the accepted interval on a checkpoint boundary while the stream can keep up.
                 var previous = checkpoints.LastOrDefault(x => x.TimestampMs <= epochMs + end);
-                var nextBoundary = checkpoints.FirstOrDefault(x => x.TimestampMs >= epochMs + end + cadenceMs);
-                if (nextBoundary is not null && nextBoundary.TimestampMs <= epochMs + watermark)
+                var latestEligible = checkpoints.LastOrDefault(x => x.TimestampMs >= epochMs + end + cadenceMs &&
+                    x.TimestampMs <= epochMs + watermark);
+                if (latestEligible is not null)
                 {
-                    watermark = nextBoundary.TimestampMs - epochMs;
-                    boundary = nextBoundary;
+                    watermark = latestEligible.TimestampMs - epochMs;
+                    boundary = latestEligible;
                     baseline = previous?.TimestampMs == epochMs + end ? previous :
-                        checkpoints.FirstOrDefault(x => x.TimestampMs >= epochMs + end && x.TimestampMs < nextBoundary.TimestampMs);
+                        checkpoints.FirstOrDefault(x => x.TimestampMs >= epochMs + end && x.TimestampMs < latestEligible.TimestampMs);
                 }
                 else
                 {
@@ -277,7 +286,7 @@ public sealed class CpuBatchBuffer(long epochMs, ManagedCodeIndex? code = null, 
                     continue;
                 }
 
-                calls.Add(deltas.TryGetValue(entry.MethodId, out var delta)
+                calls.Add(deltas.TryGetValue(entry.MethodId, out var delta) && (delta.Count > 0 || !callsIncomplete)
                     ? new(id, Metric.Calls, delta.Count, Quality.Exact, !callsIncomplete)
                     : new(id, Metric.Calls, null, Quality.Unavailable, false));
             }

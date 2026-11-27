@@ -12,7 +12,9 @@ public sealed class EntryCounters : IAsyncDisposable
     public const int CheckpointIntervalMs = 250;
     public const int MaxMethods = 32;
 
+    private const int StripeCount = 64;
     private readonly object gate = new();
+    private readonly long[][] stripes = Enumerable.Range(0, StripeCount).Select(_ => new long[MaxMethods]).ToArray();
     private readonly Dictionary<RuntimeMethodHandle, Counter> methods = new();
     private readonly CancellationTokenSource stop = new();
     private readonly Task publisher;
@@ -33,7 +35,7 @@ public sealed class EntryCounters : IAsyncDisposable
             if (methods.TryGetValue(method.MethodHandle, out var existing)) return existing;
             if (methods.Count == MaxMethods) throw new InvalidOperationException("The probe method limit was reached.");
 
-            var counter = new Counter(gate, method);
+            var counter = new Counter(stripes, methods.Count, method);
             methods.Add(method.MethodHandle, counter);
             return counter;
         }
@@ -51,14 +53,34 @@ public sealed class EntryCounters : IAsyncDisposable
                 lock (gate)
                 {
                     if (methods.Count == 0) continue;
-                    checkpoint = new(sourceId, ++sequence, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        [.. methods.Values.Select(counter => counter.Snapshot())]);
+                    checkpoint = TakeCheckpoint();
                 }
 
                 ProbeEvents.Log.Checkpoint(JsonSerializer.Serialize(checkpoint));
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+    }
+
+    private Checkpoint TakeCheckpoint()
+    {
+        var locked = 0;
+        try
+        {
+            // Hold every stripe briefly so all methods share one checkpoint boundary.
+            foreach (var stripe in stripes)
+            {
+                Monitor.Enter(stripe);
+                locked++;
+            }
+
+            return new(sourceId, ++sequence, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                [.. methods.Values.Select(counter => counter.Snapshot())]);
+        }
+        finally
+        {
+            while (locked > 0) Monitor.Exit(stripes[--locked]);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -70,15 +92,16 @@ public sealed class EntryCounters : IAsyncDisposable
 
     public sealed class Counter
     {
-        private readonly object gate;
+        private readonly long[][] stripes;
+        private readonly int slot;
         // Keep the method alive while using its runtime handle as an identity.
         private readonly MethodInfo method;
         private readonly CheckpointEntry identity;
-        private long count;
 
-        internal Counter(object gate, MethodInfo method)
+        internal Counter(long[][] stripes, int slot, MethodInfo method)
         {
-            this.gate = gate;
+            this.stripes = stripes;
+            this.slot = slot;
             this.method = method;
             identity = new(method.MethodHandle.Value.ToInt64(), method.Module.ModuleVersionId,
                 Short(Path.GetFileNameWithoutExtension(method.Module.Name)), Short(method.Name), 0);
@@ -86,10 +109,16 @@ public sealed class EntryCounters : IAsyncDisposable
 
         public void Enter()
         {
-            lock (gate) count++;
+            var stripe = stripes[Environment.CurrentManagedThreadId & (StripeCount - 1)];
+            lock (stripe) stripe[slot]++;
         }
 
-        internal CheckpointEntry Snapshot() => identity with { MethodId = method.MethodHandle.Value.ToInt64(), Count = count };
+        internal CheckpointEntry Snapshot()
+        {
+            long count = 0;
+            foreach (var stripe in stripes) count += stripe[slot];
+            return identity with { MethodId = method.MethodHandle.Value.ToInt64(), Count = count };
+        }
 
         private static string Short(string name) => name.Length <= 48 ? name : name[..48];
     }
