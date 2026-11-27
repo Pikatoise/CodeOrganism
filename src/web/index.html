@@ -27,6 +27,8 @@
             <div class="metrics" role="group" aria-label="Map metric">
               <button id="metric-cpu" type="button" aria-pressed="true">CPU</button>
               <button id="metric-allocation" type="button" aria-pressed="false" disabled>Allocations</button>
+              <button id="metric-calls" type="button" aria-pressed="false" disabled>Calls</button>
+              <button id="metric-combined" type="button" aria-pressed="false" disabled>Combined</button>
             </div>
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
@@ -42,6 +44,7 @@
       </section>
       <aside class="inspector" aria-label="Map inspection">
         <h2 id="ranking-title">Top modules</h2>
+        <div id="ranking-control" hidden><label for="ranking-metric">Rank by</label> <select id="ranking-metric"></select></div>
         <p id="rank-metric">CPU activity · milliseconds per second</p>
         <ol id="cpu-ranking"></ol>
         <p id="coverage" class="coverage"></p>

@@ -31,7 +31,7 @@ button:disabled { color: #9683a4; opacity: .65; cursor: default; }
 .map-header { justify-content: space-between; align-items: center; }
 .map-header p, .inspector p { margin-top: 6px; font-size: 12px; }
 .map-controls { display: flex; flex-wrap: wrap; gap: 6px; }
-.metrics { display: flex; gap: 4px; margin-right: 6px; }
+.metrics { display: flex; flex-wrap: wrap; gap: 4px; margin-right: 6px; }
 .metrics button[aria-pressed="true"] { background: #57377a; border-color: #b083ee; }
 .map { position: relative; min-height: 400px; height: min(61vh, 780px); background: radial-gradient(ellipse, #251633, #100b1a 78%); }
 canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
@@ -42,12 +42,13 @@ canvas:focus-visible { outline-offset: -3px; }
 .pulse { width: 7px; height: 7px; border-radius: 50%; background: #dcb3ff; box-shadow: 0 0 10px #b168ff; }
 .branch { margin-left: 10px; border-top: 1px solid #ad7dde; width: 16px; }
 .inspector { align-self: start; padding: 18px; }
+#ranking-control { margin-top: 8px; font-size: 12px; }
 .inspector ol, .inspector ul { list-style: none; margin: 12px 0; padding: 0; }
 .inspector li { border-top: 1px solid #382a48; padding: 3px 0; }
 .inspector li button { width: 100%; background: transparent; border-color: transparent; text-align: left;
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; padding-inline: 4px; }
 .inspector li button:hover { background: #261c32; }
-.inspector li span:last-child { color: #e5c5f3; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+.inspector li span:last-child { color: #e5c5f3; text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
 .coverage { line-height: 1.5; }
 details { border-top: 1px solid #382a48; border-bottom: 1px solid #382a48; margin: 15px 0; padding: 12px 0; }
 summary { cursor: pointer; font-weight: 650; }

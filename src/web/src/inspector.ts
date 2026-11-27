@@ -19,23 +19,29 @@ narrow.addEventListener("change", event => { details.open = !event.matches; });
 export function showDetails() { details.open = true; }
 
 export function inspect(snapshot: Snapshot, graph: Projection, selected: string | undefined,
-  expanded: ReadonlySet<string>, metric: MetricId, choose: (node: GraphNode, toggle: boolean) => void) {
+  expanded: ReadonlySet<string>, metric: MetricId, visibleMetrics: readonly MetricId[],
+  choose: (node: GraphNode, toggle: boolean) => void) {
   const interval = (snapshot.endMs ?? 0) - (snapshot.startMs ?? 0);
   const definition = metricDetails[metric];
-  const measurement = new Map(snapshot.measurements.filter(entry => entry.metric === metric).map(entry => [entry.nodeId, entry]));
-  const capability = snapshot.capabilities.find(item => item.metric === metric);
+  const capabilities = new Map(snapshot.capabilities.map(item => [item.metric, item]));
+  const capability = capabilities.get(metric);
   rankMetric.textContent = definition.description + (capability?.quality === "estimated" ? " · estimated" : "");
   const index = new Map(snapshot.nodes.map(node => [node.id, node]));
   const library = graph.nodes.find(node => node.kind === "library");
-  if (library) {
-    index.set(library.id, library);
-    const available = graph.libraryModules.map(id => measurement.get(id)).filter(row => row?.value != null);
-    if (available.length) measurement.set(library.id, {
-      nodeId: library.id, metric, quality: available.some(item => item?.quality === "estimated") ? "estimated" : "exact",
-      value: available.reduce((total, entry) => total + (entry?.value ?? 0), 0),
-      complete: available.length === graph.libraryModules.length && available.every(entry => entry?.complete)
-    });
+  if (library) index.set(library.id, library);
+  const metrics = new Map(visibleMetrics.map(id => [id, new Map<string, Measurement>()]));
+  for (const entry of snapshot.measurements) metrics.get(entry.metric as MetricId)?.set(entry.nodeId, entry);
+  if (library) for (const [id, readings] of metrics) {
+    const available = graph.libraryModules.map(key => readings.get(key)).filter(row => row?.value != null);
+    const total = available.reduce((sum, entry) => sum + (entry?.value ?? 0), 0);
+    if (available.length && Number.isFinite(total) && (id !== "calls" || Number.isSafeInteger(total))) {
+      readings.set(library.id, {
+        nodeId: library.id, metric: id, quality: available.some(item => item?.quality === "estimated") ? "estimated" : "exact",
+        value: total, complete: available.length === graph.libraryModules.length && available.every(entry => entry?.complete)
+      });
+    }
   }
+  const measurement = metrics.get(metric)!;
 
   const byMethod = graph.nodes.some(node => node.kind === "method");
   heading.textContent = byMethod ? "Top methods" : "Top modules";
@@ -57,15 +63,23 @@ export function inspect(snapshot: Snapshot, graph: Projection, selected: string 
   const picked = selected ? index.get(selected) : undefined;
   const parent = picked?.parentId ? index.get(picked.parentId) : undefined;
   name.textContent = picked ? [parent?.label, picked.label].filter(Boolean).join(" / ") : "Select a node to inspect it.";
-  const row = picked ? measurement.get(picked.id) : undefined;
-  const quality = row?.value == null ? "Unavailable" : row.quality === "estimated" ? "Estimated" : "Exact";
-  const stats = picked ? [
-    [definition.label, displayedRate(row, metric, interval)],
-    ["Measurement", capability ? methodLabel(capability.method) : "Unavailable"],
-    ["Quality", quality],
-    ["Interval", interval > 0 ? `${format.format(interval)} ms` : "Unavailable"],
-    ["Coverage", row?.value == null ? "Unavailable" : row.complete ? "Complete sample window" : "Partial sample window"]
-  ] : [];
+  const stats = picked ? visibleMetrics.flatMap(id => {
+    const row = metrics.get(id)?.get(picked.id);
+    const method = capabilities.get(id)?.method;
+    const label = metricDetails[id].label;
+    const field = (title: string) => visibleMetrics.length > 1 ? `${label} ${title.toLowerCase()}` : title;
+    const quality = row?.value == null ? "Unavailable" : row.quality === "estimated" ? "Estimated"
+      : row.complete ? "Exact" : "Covered entries only";
+    const scope = id === "calls" ? "checkpoint window" : "sample window";
+    return [
+      [label, displayedRate(row, id, interval)],
+      ...(id === "calls" && row?.value != null && row.complete ? [["Entry count", format.format(row.value)]] : []),
+      [field("Measurement"), method ? methodLabel(method) : "Unavailable"],
+      [field("Quality"), quality],
+      [field("Coverage"), row?.value == null ? "Unavailable" : `${row.complete ? "Complete" : "Partial"} ${scope}`]
+    ];
+  }) : [];
+  if (picked) stats.push(["Interval", interval > 0 ? `${format.format(interval)} ms` : "Unavailable"]);
   values.replaceChildren(...stats.flatMap(([key, value]) => {
     const term = document.createElement("dt"), description = document.createElement("dd");
     term.textContent = key; description.textContent = value;
@@ -73,9 +87,12 @@ export function inspect(snapshot: Snapshot, graph: Projection, selected: string 
   }));
 
   const messages: string[] = [];
-  const relevantLoss = snapshot.loss.filter(item => item.metric == null || item.metric === metric);
+  const relevantLoss = snapshot.loss.filter(item => item.metric == null || visibleMetrics.includes(item.metric as MetricId));
   if (relevantLoss.some(item => item.kind === "source-events")) messages.push("Measurement loss in this interval.");
-  if (relevantLoss.some(item => item.kind === "unresolved-attribution")) messages.push(definition.unresolved);
+  for (const id of visibleMetrics) {
+    if (relevantLoss.some(item => item.kind === "unresolved-attribution" && (item.metric == null || item.metric === id)))
+      messages.push(metricDetails[id].unresolved);
+  }
   if (relevantLoss.some(item => item.kind === "topology-limit")) messages.push("Some branches could not fit on the map.");
   if (snapshot.gaps > 0) messages.push(`${snapshot.gaps} interval gap${snapshot.gaps === 1 ? "" : "s"} in this session.`);
   coverage.textContent = messages.join(" ") || (!active.length && snapshot.state === "live" ? definition.missing : "");

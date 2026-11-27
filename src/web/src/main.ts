@@ -3,15 +3,19 @@ import { RuntimeMap } from "./graph/map";
 import { isLibrary, StableLayout, type GraphNode, type Snapshot } from "./graph/layout";
 import { inspect, showDetails } from "./inspector";
 import { connectControls } from "./control";
-import { metricDetails, type MetricId } from "./graph/metrics";
+import { metricDetails, metricIds, type MapMode, type MetricId } from "./graph/metrics";
 
 const status = document.querySelector<HTMLElement>("#source-status")!;
 const empty = document.querySelector<HTMLElement>("#map-empty")!;
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
 const buttons = {
   cpu: document.querySelector<HTMLButtonElement>("#metric-cpu")!,
-  allocation: document.querySelector<HTMLButtonElement>("#metric-allocation")!
+  allocation: document.querySelector<HTMLButtonElement>("#metric-allocation")!,
+  calls: document.querySelector<HTMLButtonElement>("#metric-calls")!,
+  combined: document.querySelector<HTMLButtonElement>("#metric-combined")!
 };
+const rankingControl = document.querySelector<HTMLElement>("#ranking-control")!;
+const rankingMetric = document.querySelector<HTMLSelectElement>("#ranking-metric")!;
 const metricCaption = document.querySelector<HTMLElement>("#metric-caption")!;
 const metricLegend = document.querySelector<HTMLElement>("#metric-legend")!;
 const layout = new StableLayout();
@@ -22,7 +26,8 @@ let displayed: Snapshot | undefined;
 let selected: string | undefined;
 let paused = false;
 let online = false;
-let metric: MetricId = "cpu";
+let mode: MapMode = "cpu";
+let rankBy: MetricId = "cpu";
 let control = { state: "idle" };
 
 const controls = connectControls(next => { control = next; updateStatus(); });
@@ -53,9 +58,14 @@ pauseButton.addEventListener("click", () => {
 document.querySelector("#zoom-in")!.addEventListener("click", () => map.zoomBy(1.25));
 document.querySelector("#zoom-out")!.addEventListener("click", () => map.zoomBy(1 / 1.25));
 document.querySelector("#reset-view")!.addEventListener("click", () => map.reset());
-for (const id of Object.keys(buttons) as MetricId[]) {
-  buttons[id].addEventListener("click", () => { metric = id; render(); });
+for (const id of Object.keys(buttons) as MapMode[]) {
+  buttons[id].addEventListener("click", () => {
+    mode = id;
+    if (id !== "combined") rankBy = id;
+    render();
+  });
 }
+rankingMetric.addEventListener("change", () => { rankBy = rankingMetric.value as MetricId; render(); });
 
 function choose(node: GraphNode, toggle: boolean) {
   if (!displayed) return;
@@ -86,20 +96,30 @@ function apply(snapshot: Snapshot) {
 
 function render() {
   if (!displayed) return;
-  const available = new Set(displayed.capabilities.map(item => item.metric));
-  if (!available.has(metric)) metric = available.has("cpu") ? "cpu" : available.has("allocation") ? "allocation" : "cpu";
-  for (const id of Object.keys(buttons) as MetricId[]) {
-    buttons[id].disabled = !available.has(id);
-    buttons[id].setAttribute("aria-pressed", String(id === metric));
-    buttons[id].title = available.has(id) ? "" : "This source does not provide the metric.";
+  const available = metricIds.filter(id => displayed?.capabilities.some(item => item.metric === id));
+  if (mode === "combined" ? available.length < 2 : !available.includes(mode)) mode = available[0] ?? "cpu";
+  if (mode !== "combined") rankBy = mode;
+  else if (!available.includes(rankBy)) rankBy = available[0];
+  for (const id of Object.keys(buttons) as MapMode[]) {
+    const enabled = id === "combined" ? available.length > 1 : available.includes(id);
+    buttons[id].disabled = !enabled;
+    buttons[id].setAttribute("aria-pressed", String(id === mode));
+    buttons[id].title = enabled ? "" : id === "combined" ? "Combined view requires at least two metrics."
+      : "This source does not provide the metric.";
   }
-  metricCaption.textContent = metricDetails[metric].description;
-  metricLegend.textContent = metricDetails[metric].legend;
+  const visibleMetrics = mode === "combined" ? available : [mode];
+  rankingControl.hidden = mode !== "combined";
+  if ([...rankingMetric.options].map(option => option.value).join() !== available.join()) {
+    rankingMetric.replaceChildren(...available.map(id => new Option(metricDetails[id].label, id)));
+  }
+  rankingMetric.value = rankBy;
+  metricCaption.textContent = mode === "combined" ? "Combined activity" : metricDetails[mode].description;
+  metricLegend.textContent = visibleMetrics.map(id => metricDetails[id].legend).join(" · ");
   empty.hidden = displayed.nodes.length > 0;
   pauseButton.disabled = displayed.nodes.length === 0;
   const graph = layout.project(displayed, expanded);
-  map.show(graph, selected, metric);
-  inspect(displayed, graph, selected, expanded, metric, choose);
+  map.show(graph, selected, visibleMetrics);
+  inspect(displayed, graph, selected, expanded, rankBy, visibleMetrics, choose);
 }
 
 function updateStatus() {

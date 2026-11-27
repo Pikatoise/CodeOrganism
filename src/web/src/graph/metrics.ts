@@ -1,6 +1,8 @@
 import type { Measurement } from "./layout";
 
-export type MetricId = "cpu" | "allocation";
+export const metricIds = ["cpu", "allocation", "calls"] as const;
+export type MetricId = typeof metricIds[number];
+export type MapMode = MetricId | "combined";
 const format = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 export const metricDetails = {
@@ -21,6 +23,15 @@ export const metricDetails = {
     unresolved: "Some allocation samples could not be attributed.",
     strength: (perSecond: number) => Math.log1p(perSecond / (64 * 1024)) / Math.log1p(1_024),
     formatRate: formatBytes
+  },
+  calls: {
+    label: "Method calls",
+    description: "Method entry rate · calls per second",
+    legend: "Glow: call rate",
+    missing: "No covered method entries in this interval.",
+    unresolved: "Some calls could not be attributed.",
+    strength: (perSecond: number) => Math.log1p(perSecond) / Math.log1p(50_000),
+    formatRate: (perSecond: number) => `${format.format(perSecond)} calls/s`
   }
 } satisfies Record<MetricId, {
   label: string; description: string; legend: string; missing: string; unresolved: string;
@@ -32,13 +43,16 @@ export function toRate(value: number, interval: number) {
 }
 
 export function displayedRate(row: Measurement | undefined, metric: MetricId, interval: number) {
-  return row?.value == null || interval <= 0 ? "Unavailable" : metricDetails[metric].formatRate(toRate(row.value, interval));
+  if (row?.value == null || interval <= 0) return "Unavailable";
+  if (metric === "calls" && !row.complete) return `${format.format(row.value)} covered calls`;
+  return metricDetails[metric].formatRate(toRate(row.value, interval));
 }
 
 export function methodLabel(value: string) {
   switch (value) {
     case "windows-etw-on-cpu-sampling": return "Windows ETW CPU sampling";
     case "dotnet-eventpipe-allocation-ticks": return ".NET EventPipe allocation ticks";
+    case "dotnet-eventpipe-entry-checkpoints": return ".NET entry checkpoints";
     default: return value;
   }
 }
