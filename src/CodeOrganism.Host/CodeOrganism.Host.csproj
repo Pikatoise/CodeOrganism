@@ -10,4 +10,32 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <Target Name="AddLocalDistribution" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$(OS)' == 'Windows_NT')">
+    <PropertyGroup>
+      <WebProject>$(MSBuildProjectDirectory)/../web</WebProject>
+      <ConnectorProject>$(MSBuildProjectDirectory)/../CodeOrganism.Connector.DotNet</ConnectorProject>
+      <ConnectorPublish>$(MSBuildProjectDirectory)/obj/$(Configuration)/connector-win-x64</ConnectorPublish>
+      <RepositoryRoot>$(MSBuildProjectDirectory)/../..</RepositoryRoot>
+    </PropertyGroup>
+
+    <Exec WorkingDirectory="$(WebProject)" Command="npm.cmd ci --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(WebProject)" Command="npm.cmd run build" />
+    <Exec Command="dotnet publish &quot;$(ConnectorProject)/CodeOrganism.Connector.DotNet.csproj&quot; -c $(Configuration) -r win-x64 --self-contained false -o &quot;$(ConnectorPublish)&quot;" />
+
+    <ItemGroup>
+      <PublishedWeb Include="$(WebProject)/dist/**/*" />
+      <PublishedConnector Include="$(ConnectorPublish)/*.dll;$(ConnectorPublish)/*.json;$(ConnectorPublish)/*.exe"
+                          Exclude="$(ConnectorPublish)/Dia2Lib.dll;$(ConnectorPublish)/TraceReloggerLib.dll" />
+      <ResolvedFileToPublish Include="@(PublishedWeb)" RelativePath="wwwroot/%(PublishedWeb.RecursiveDir)%(PublishedWeb.Filename)%(PublishedWeb.Extension)"
+                             CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+      <ResolvedFileToPublish Include="@(PublishedConnector)" RelativePath="connector/%(PublishedConnector.Filename)%(PublishedConnector.Extension)"
+                             CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+      <ResolvedFileToPublish Include="$(ConnectorPublish)/amd64/KernelTraceControl.dll" RelativePath="connector/amd64/KernelTraceControl.dll"
+                             CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+      <ResolvedFileToPublish Include="$(RepositoryRoot)/LICENSE" RelativePath="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+      <ResolvedFileToPublish Include="$(RepositoryRoot)/THIRD-PARTY-NOTICES.md" RelativePath="THIRD-PARTY-NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
 </Project>

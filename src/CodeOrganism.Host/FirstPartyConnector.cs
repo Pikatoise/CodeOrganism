@@ -177,6 +177,7 @@ internal sealed class FirstPartyConnector(string? executable, string producerTok
         var candidates = new[]
         {
             Environment.GetEnvironmentVariable("CODEORGANISM_CONNECTOR"),
+            Path.Combine(AppContext.BaseDirectory, "connector", name),
             Path.Combine(AppContext.BaseDirectory, name),
             Path.Combine(environment.ContentRootPath, developmentPath, configuration, "net10.0", name),
             Path.Combine(environment.ContentRootPath, "..", "..", developmentPath, configuration, "net10.0", name)

@@ -36,6 +36,7 @@ var configuredAssets = Environment.GetEnvironmentVariable("CODEORGANISM_WEB_ROOT
 var candidates = new[]
 {
     configuredAssets,
+    Path.Combine(AppContext.BaseDirectory, "wwwroot"),
     Path.Combine(app.Environment.ContentRootPath, "src", "web", "dist"),
     Path.Combine(app.Environment.ContentRootPath, "..", "web", "dist"),
     app.Environment.WebRootPath

@@ -2,6 +2,7 @@ import { test as base } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -15,10 +16,10 @@ type Host = { url: string; credential: string; start: (binary: string, env?: Nod
 export const test = base.extend<{ host: Host }>({
   host: async ({}, use) => {
     const children: ChildProcess[] = [];
-    function start(binary: string, env: NodeJS.ProcessEnv = {}, args: string[] = []) {
+    function start(binary: string, env: NodeJS.ProcessEnv = {}, args: string[] = [], cwd = root) {
       const child = spawn(binary.endsWith(".dll") ? dotnet : binary,
         binary.endsWith(".dll") ? [binary, ...args] : args, {
-          cwd: root, env: { ...process.env, ...env }, stdio: "pipe", windowsHide: true
+          cwd, env: { ...process.env, ...env }, stdio: "pipe", windowsHide: true
         });
       children.push(child);
       child.stderr?.resume();
@@ -26,7 +27,9 @@ export const test = base.extend<{ host: Host }>({
     }
 
     const credential = randomBytes(24).toString("hex");
-    const host = start(hostDll, { CODEORGANISM_PRODUCER_TOKEN: credential });
+    const bundle = process.env.CODEORGANISM_TEST_BUNDLE;
+    const host = start(bundle ? resolve(bundle, "CodeOrganism.Host.exe") : hostDll,
+      { CODEORGANISM_PRODUCER_TOKEN: credential }, [], bundle ? tmpdir() : root);
     try {
       const url = await lineValue(host, line => /http:\/\/127\.0\.0\.1:\d+/.exec(line)?.[0]);
       await use({ url, credential, start });
