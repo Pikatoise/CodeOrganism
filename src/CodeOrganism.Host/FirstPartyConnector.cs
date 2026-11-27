@@ -153,7 +153,7 @@ internal sealed class FirstPartyConnector(string? executable, string producerTok
             RedirectStandardInput = true,
             RedirectStandardOutput = true
         };
-        start.Environment.Remove("CODEORGANISM_PRODUCER_TOKEN");
+        start.Environment.Remove(ConnectorAuthorization.TokenEnvironmentVariable);
         start.ArgumentList.Add(command);
         return Process.Start(start) ?? throw new InvalidOperationException("The connector could not start.");
     }

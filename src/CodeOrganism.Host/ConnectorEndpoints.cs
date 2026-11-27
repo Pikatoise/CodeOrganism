@@ -1,13 +1,10 @@
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using CodeOrganism.Protocol;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace CodeOrganism.Host;
 
-internal sealed class ConnectorEndpoints(SessionStore store, ConnectorLimits limits, ProducerCredential credential)
+internal sealed class ConnectorEndpoints(SessionStore store, ConnectorLimits limits, ConnectorAuthorization credential)
 {
     private readonly SemaphoreSlim ingress = new(4, 4);
 
@@ -90,15 +87,4 @@ internal sealed class ConnectorEndpoints(SessionStore store, ConnectorLimits lim
         "invalid-reference" => "Check topology references and the session's declared metric capabilities.",
         _ => "Check the payload against the v1 connector contract."
     };
-}
-
-internal sealed class ProducerCredential(string token)
-{
-    private readonly byte[] expected = Encoding.UTF8.GetBytes(token);
-
-    public bool Allows(string? value) =>
-        AuthenticationHeaderValue.TryParse(value, out var authorization) &&
-        authorization.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase) &&
-        authorization.Parameter is { } actual &&
-        CryptographicOperations.FixedTimeEquals(expected, Encoding.UTF8.GetBytes(actual));
 }
