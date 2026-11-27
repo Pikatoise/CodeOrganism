@@ -22,9 +22,13 @@ public class CpuAttachTests
     }
 
     [ElevatedWindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task ResolvesWarmMethodsAndSamplesBusyWorkRatherThanWaiting()
     {
-        var assembly = typeof(CpuScenario).Assembly.Location;
+        var original = typeof(CpuScenario).Assembly.Location;
+        var scratch = Directory.CreateTempSubdirectory("CodeOrganism-no-symbols-");
+        var assembly = Path.Combine(scratch.FullName, Path.GetFileName(original));
+        File.Copy(original, assembly);
         var runtime = Path.Combine(AppContext.BaseDirectory, "CodeOrganism.Windows.Tests.runtimeconfig.json");
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
@@ -38,10 +42,13 @@ public class CpuAttachTests
         using var fixture = Process.Start(start)!;
         try
         {
+            Assert.Empty(scratch.GetFiles("*.pdb"));
             using var output = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             Assert.NotNull(await fixture.StandardOutput.ReadLineAsync(output.Token));
             Assert.Contains("BusyAlpha", await fixture.StandardOutput.ReadLineAsync(output.Token));
             Assert.Contains("BusyBeta", await fixture.StandardOutput.ReadLineAsync(output.Token));
+            using var verified = AttachSession.OpenTarget(new(fixture.Id, fixture.StartTime.ToUniversalTime()));
+            Assert.Equal(fixture.Id, verified.Id);
 
             var counts = new Dictionary<string, int>();
             var maxDispatchMs = 0L;
@@ -65,6 +72,20 @@ public class CpuAttachTests
             if (!fixture.HasExited)
                 fixture.Kill();
             await fixture.WaitForExitAsync();
+            fixture.Dispose();
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    scratch.Delete(recursive: true);
+                    break;
+                }
+                catch (Exception error) when (attempt < 10 && error is IOException or UnauthorizedAccessException)
+                {
+                    // Windows can keep an image mapped briefly after the process signals exit.
+                    await Task.Delay(100);
+                }
+            }
         }
     }
 }

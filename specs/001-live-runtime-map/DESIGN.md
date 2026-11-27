@@ -14,4 +14,4 @@ At 1440 px keep the inspector beside the map. At 640 px let it collapse, leaving
 
 Start with approximately one-second metric windows and a two-second visual fade after the last active window. Tune these in PoC against the agreed render latency. Within a view, use a distinct stable scale per metric based on recent values and clamp outliers. Apply decay only to visual emphasis and disclose the displayed units in the legend. A deliberately static CPU emphasis is the reduced-motion equivalent of pulse.
 
-The reference states above define behavior and composition. Before production UI work, create visual mockups for the three states and validate their layout at both widths.
+The [visual reference captures](validation/design/README.md) show all three states at both widths. The combined reference uses synthetic data and describes the later allocation and call-frequency phases.

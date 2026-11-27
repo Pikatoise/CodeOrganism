@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using CodeOrganism.Protocol;
 using Microsoft.Win32.SafeHandles;
@@ -111,12 +112,12 @@ internal static class EtwWorker
             return 1;
 
         using var reader = new StreamReader(pipe, leaveOpen: true);
-        using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
         using var confirm = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-        await writer.WriteLineAsync(nonce.AsMemory(), confirm.Token);
+        await WriteLineAsync(nonce, confirm.Token);
         if (await reader.ReadLineAsync(confirm.Token) != "start")
             return 1;
 
+        using var monitor = new CancellationTokenSource();
         var disconnect = StopOnDisconnectAsync();
         try
         {
@@ -137,18 +138,22 @@ internal static class EtwWorker
         }
         finally
         {
-            await pipe.DisposeAsync();
+            monitor.Cancel();
             await disconnect;
         }
 
         Task WriteAsync(WorkerFrame frame, CancellationToken active) =>
-            writer.WriteLineAsync(JsonSerializer.Serialize(frame, ConnectorMessages.Json).AsMemory(), active);
+            WriteLineAsync(JsonSerializer.Serialize(frame, ConnectorMessages.Json), active);
+
+        Task WriteLineAsync(string line, CancellationToken active) =>
+            pipe.WriteAsync(Encoding.UTF8.GetBytes(line + "\n"), active).AsTask();
 
         async Task StopOnDisconnectAsync()
         {
-            try { await reader.ReadLineAsync(); }
+            try { await reader.ReadLineAsync(monitor.Token); }
             catch (IOException) { }
             catch (ObjectDisposedException) { }
+            catch (OperationCanceledException) when (monitor.IsCancellationRequested) { return; }
             stop.Cancel();
         }
     }

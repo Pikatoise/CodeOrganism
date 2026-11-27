@@ -28,6 +28,8 @@ app.Use(async (context, next) =>
         return;
     }
 
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Cross-Origin-Resource-Policy"] = "same-origin";
     await next(context);
 });
 

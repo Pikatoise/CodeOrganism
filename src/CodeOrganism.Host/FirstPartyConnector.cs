@@ -92,7 +92,7 @@ internal sealed class FirstPartyConnector(string? executable, string producerTok
             {
                 await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request, ConnectorMessages.Json));
                 await process.StandardInput.FlushAsync();
-                using var cancel = run.Token.Register(process.StandardInput.Close);
+                using var cancel = run.Token.Register(() => CloseInput(process));
                 while (await process.StandardOutput.ReadLineAsync(run.Token) is { } line)
                 {
                     var report = JsonSerializer.Deserialize<LocalAttachStatus>(line, ConnectorMessages.Json);
@@ -105,7 +105,7 @@ internal sealed class FirstPartyConnector(string? executable, string producerTok
             {
                 if (!process.HasExited)
                 {
-                    process.StandardInput.Close();
+                    CloseInput(process);
                     try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
                     catch (TimeoutException) { process.Kill(); }
                 }
@@ -156,6 +156,13 @@ internal sealed class FirstPartyConnector(string? executable, string producerTok
         start.Environment.Remove("CODEORGANISM_PRODUCER_TOKEN");
         start.ArgumentList.Add(command);
         return Process.Start(start) ?? throw new InvalidOperationException("The connector could not start.");
+    }
+
+    private static void CloseInput(Process process)
+    {
+        try { process.StandardInput.Close(); }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
     }
 
     public static string? FindExecutable(IWebHostEnvironment environment)

@@ -32,7 +32,7 @@
 - [X] T013 [P] [US1] Produce the three visual mockups and capture both widths under `specs/001-live-runtime-map/validation/design/` following [DESIGN.md](DESIGN.md).
 - [X] T014 [P] [US1] Implement connected, restricted, unsupported, exited and detached states and typed connector control in `src/CodeOrganism.Host/FirstPartyConnector.cs` and `src/CodeOrganism.Connector.DotNet/AttachSession.cs`. Use the privilege boundary in the plan, including cleanup after child exit or denied elevation. Keep the target alive on detach.
 - [X] T015 [US1] Implement stable layout, module and library grouping, pan, zoom, selection, ranking, pause/resume, gradual decay and reduced motion in `src/web/src/graph/layout.ts`, `src/web/src/graph/map.ts` and `src/web/src/inspector.ts`. See [View snapshot](data-model.md#view-snapshot) (`Snapshot.renderState`).
-- [ ] T016 [US1] Check attach errors, no-symbol behavior, stale and incomplete state, and the two-width CPU workflow in `tests/CodeOrganism.Windows.Tests/CpuAttachTests.cs` and `tests/browser/cpu-map.spec.ts`.
+- [X] T016 [US1] Check attach errors, no-symbol behavior, stale and incomplete state, and the two-width CPU workflow in `tests/CodeOrganism.Windows.Tests/CpuAttachTests.cs` and `tests/browser/cpu-map.spec.ts`.
 
 ## Phase 4: US2 - Find allocation hotspots (P2)
 

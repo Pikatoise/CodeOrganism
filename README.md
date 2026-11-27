@@ -15,4 +15,6 @@ npm.cmd --prefix src/web run check
 npm.cmd --prefix src/web run build
 ```
 
-Start the browser shell separately during development with `npm.cmd --prefix src/web run dev`. The [validation guide](specs/001-live-runtime-map/quickstart.md) describes the planned integrated workflow.
+Start the local host with `dotnet run --project src/CodeOrganism.Host -c Release` from the repository root. Open the loopback URL printed by the host. Start a .NET 10 process, choose it by PID, and select **Attach**. Windows may prompt for permission to start the dedicated CPU collector.
+
+Run the [CPU workflow checks](specs/001-live-runtime-map/quickstart.md#cpu-browser-workflow) after building.

@@ -23,6 +23,18 @@ dotnet run --project samples/Workload.Console -c Release
 
 The host prints its loopback address. Open it and choose the started workload by process name and PID. Repeat warm attach with the web fixture and verify a release fixture with debug symbols removed. Use the [visible design states](DESIGN.md) and [metric model](data-model.md#measurement) during validation.
 
+## CPU browser workflow
+
+Build the solution and browser assets in Release before testing. Install Microsoft Edge for the browser suite.
+
+```powershell
+dotnet test CodeOrganism.slnx -c Release
+npm.cmd --prefix tests/browser ci
+npm.cmd --prefix tests/browser test
+```
+
+Run the browser suite from an elevated Windows test shell with `CODEORGANISM_TEST_ETW=1` to exercise real capture and detach. The regular suite covers the responsive map, pause and resume, CPU coverage, process error handling and request authorization. In normal use, the browser and host can run unelevated. Approve the Windows prompt for the collector when attaching.
+
 ## Acceptance matrix
 
 | Scenario | Procedure and pass condition |
