@@ -7,4 +7,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(EnableCallProbes)' == 'true'">
+    <DefineConstants>$(DefineConstants);CALL_PROBES</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableCallProbes)' == 'true'">
+    <ProjectReference Include="../../src/CodeOrganism.CallProbes/CodeOrganism.CallProbes.csproj" />
+  </ItemGroup>
+
 </Project>

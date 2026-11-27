@@ -4,6 +4,7 @@
     <Project Path="samples/Workload.Web/Workload.Web.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/CodeOrganism.CallProbes/CodeOrganism.CallProbes.csproj" />
     <Project Path="src/CodeOrganism.Connector.DotNet/CodeOrganism.Connector.DotNet.csproj" />
     <Project Path="src/CodeOrganism.Host/CodeOrganism.Host.csproj" />
     <Project Path="src/CodeOrganism.Protocol/CodeOrganism.Protocol.csproj" />
