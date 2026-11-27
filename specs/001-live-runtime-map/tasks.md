@@ -56,7 +56,7 @@
 
 **Independent test**: A standalone connector script publishes only call count and the browser correctly handles available, missing and incompatible data.
 
-- [ ] T025 [P] [US4] Write the stand-alone HTTP publisher and onboarding instructions in `samples/Connector.Example/publish.ps1` and `samples/Connector.Example/README.md`. Follow the [v1 contract](contracts/connector-v1.md).
+- [X] T025 [P] [US4] Write the stand-alone HTTP publisher and onboarding instructions in `samples/Connector.Example/publish.ps1` and `samples/Connector.Example/README.md`. Follow the [v1 contract](contracts/connector-v1.md).
 - [ ] T026 [US4] Expose explicit local connector authorization in `src/CodeOrganism.Host/ConnectorAuthorization.cs` and document it in `README.md`.
 - [ ] T027 [US4] Verify the sample's availability, incompatible-version and session-conflict paths in `tests/browser/connector-example.spec.ts`.
 
