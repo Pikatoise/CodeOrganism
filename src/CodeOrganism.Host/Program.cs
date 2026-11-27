@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using CodeOrganism.Host;
 using CodeOrganism.Protocol;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
@@ -28,6 +29,23 @@ app.Use(async (context, next) =>
 
     await next(context);
 });
+
+var configuredAssets = Environment.GetEnvironmentVariable("CODEORGANISM_WEB_ROOT");
+var candidates = new[]
+{
+    configuredAssets,
+    Path.Combine(app.Environment.ContentRootPath, "src", "web", "dist"),
+    Path.Combine(app.Environment.ContentRootPath, "..", "web", "dist"),
+    app.Environment.WebRootPath
+};
+var webAssets = candidates.FirstOrDefault(path => path is not null && File.Exists(Path.Combine(path, "index.html")));
+if (webAssets is not null)
+{
+    var assets = new PhysicalFileProvider(Path.GetFullPath(webAssets));
+    app.Lifetime.ApplicationStopped.Register(assets.Dispose);
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = assets });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = assets });
+}
 
 app.MapGet("/health", () => Results.Ok());
 var store = app.Services.GetRequiredService<SessionStore>();

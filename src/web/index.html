@@ -3,12 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
     <title>CodeOrganism</title>
   </head>
   <body>
-    <main>
+    <header class="topbar">
       <h1>CodeOrganism</h1>
-      <p id="source-status" role="status"></p>
+      <p id="source-status" role="status" data-state="connecting">Connecting to the local visualizer</p>
+    </header>
+    <main>
+      <section class="map" aria-labelledby="map-title">
+        <div class="map-header">
+          <h2 id="map-title">Runtime map</h2>
+          <p>CPU activity · estimated</p>
+        </div>
+        <canvas id="runtime-map" aria-hidden="true"></canvas>
+        <p class="empty" id="map-empty">Waiting for observations from a local connector.</p>
+        <div class="legend"><span class="pulse"></span> CPU activity <span class="branch"></span> Observed stack link</div>
+      </section>
+      <aside class="inspector" aria-labelledby="ranking-title">
+        <h2 id="ranking-title">Top methods</h2>
+        <p id="window">CPU milliseconds per second</p>
+        <ol id="cpu-ranking"></ol>
+        <p id="coverage" class="coverage"></p>
+      </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
