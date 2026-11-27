@@ -9,6 +9,21 @@ namespace CodeOrganism.Windows.Tests;
 
 public class CpuAttachTests
 {
+    [Theory]
+    [InlineData(5)]
+    [InlineData(1223)]
+    [SupportedOSPlatform("windows")]
+    public async Task DeniedWorkerLaunchReportsRestrictedCollection(int error)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var current = Process.GetCurrentProcess();
+        var result = await Assert.ThrowsAsync<AttachException>(() => EtwWorker.CollectAsync(current.Id,
+            current.StartTime.ToUniversalTime(), 200, (_, _) => throw new InvalidOperationException("Unexpected batch."),
+            CancellationToken.None, _ => throw new System.ComponentModel.Win32Exception(error)));
+        Assert.Equal("elevation-denied", result.Code);
+    }
+
     [Fact]
     public void RejectsAReusedProcessIdentityBeforeOpeningEtw()
     {

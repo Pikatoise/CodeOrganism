@@ -18,7 +18,8 @@ internal static class EtwWorker
     private sealed record WorkerFrame(ConnectorBatch? Batch = null, CpuCaptureResult? Result = null, string? Error = null);
 
     public static async Task<CpuCaptureResult> CollectAsync(int pid, DateTime startedUtc, int cadence,
-        Func<ConnectorBatch, CancellationToken, Task> publish, CancellationToken stop)
+        Func<ConnectorBatch, CancellationToken, Task> publish, CancellationToken stop,
+        Func<ProcessStartInfo, Process?>? startWorker = null)
     {
         var name = "CodeOrganism-" + Guid.NewGuid().ToString("N");
         var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -42,7 +43,7 @@ internal static class EtwWorker
             };
             foreach (var value in new[] { "etw-worker", name, nonce, pid.ToString(), startedUtc.Ticks.ToString(), cadence.ToString(), Environment.ProcessId.ToString() })
                 launch.ArgumentList.Add(value);
-            worker = await Task.Run(() => Process.Start(launch), stop);
+            worker = await Task.Run(() => (startWorker ?? Process.Start)(launch), stop);
         }
         catch (Win32Exception error) when (error.NativeErrorCode is 5 or 1223)
         {

@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\CodeOrganism.CallProbes\CodeOrganism.CallProbes.csproj" />
     <ProjectReference Include="..\CodeOrganism.Protocol\CodeOrganism.Protocol.csproj" />
+    <InternalsVisibleTo Include="CodeOrganism.Windows.Tests" />
   </ItemGroup>
 
 </Project>

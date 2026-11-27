@@ -1,6 +1,6 @@
 # Quickstart and Acceptance
 
-This guide defines validation for the planned implementation. The commands become available through the tasks. No development-stage commands or measurements have been run yet.
+This guide defines validation for the live runtime map. See the [MVP validation report](validation/mvp.md) for the release run.
 
 ## Orca handoff
 
@@ -8,9 +8,9 @@ Work from the repository root. This feature directory is `specs/001-live-runtime
 
 ## Setup
 
-Use Windows 11 x64, .NET 10 SDK and a desktop Chromium browser. Use Node.js 24 for frontend build and browser tests. The CPU collector may need elevation for ETW. Keep the host and browser unelevated. The approved verification machine and profile will be recorded at the CPU PoC gate.
+Use Windows 11 x64, the .NET 10 SDK, and Microsoft Edge. Use Node.js 24 for frontend build and browser tests. The CPU collector may need elevation for ETW. Keep the host and browser unelevated during normal use. See the [CPU PoC](validation/cpu-poc.md) for the measured profile.
 
-Planned commands from the repository root:
+Run these commands from the repository root:
 
 ```powershell
 dotnet build CodeOrganism.slnx -c Release
@@ -34,6 +34,10 @@ npm.cmd --prefix tests/browser test
 ```
 
 Run the browser suite from an elevated Windows test shell with `CODEORGANISM_TEST_ETW=1` to exercise real capture and detach. The regular suite covers the responsive map, pause and resume, CPU coverage, process error handling and request authorization. In normal use, the browser and host can run unelevated. Approve the Windows prompt for the collector when attaching.
+
+Set `CODEORGANISM_TEST_CALL_TARGET` to the prepared console DLL to include the live call tests. [Build and run the prepared workload](validation/call-probes.md#qualified-scope).
+
+Set `CODEORGANISM_TEST_BUNDLE` to the absolute publish directory to run Playwright against the offline bundle from outside the repository. [Publish the Windows x64 bundle](../../README.md#publish-for-offline-use).
 
 ## Acceptance matrix
 

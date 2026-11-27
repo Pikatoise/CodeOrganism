@@ -63,7 +63,7 @@
 ## Phase 7: Release validation
 
 - [X] T028 Package local browser assets and connector binaries from `src/CodeOrganism.Host/CodeOrganism.Host.csproj`. Verify the bundle works offline and include required notices in `THIRD-PARTY-NOTICES.md`.
-- [ ] T029 Run the [acceptance matrix](quickstart.md) and record results and performance qualifications in `specs/001-live-runtime-map/validation/mvp.md`.
+- [X] T029 Run the [acceptance matrix](quickstart.md) and record results and performance qualifications in `specs/001-live-runtime-map/validation/mvp.md`.
 
 ## Dependencies & Execution Order
 
