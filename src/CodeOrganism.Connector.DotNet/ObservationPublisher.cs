@@ -218,7 +218,7 @@ public sealed class CpuBatchBuffer(long epochMs)
 
             var moduleName = method.ModuleName ?? (string.IsNullOrWhiteSpace(method.TypeName)
                 ? "Managed module" : method.TypeName.Split('.')[0]);
-            nodes.TryAdd(moduleId, new(moduleId, NodeKind.Module, ShortLabel(moduleName)));
+            nodes.TryAdd(moduleId, new(moduleId, NodeKind.Module, ShortLabel(moduleName), Library: method.Library));
             var methodLabel = string.IsNullOrWhiteSpace(method.Name) ? id : method.Name;
             nodes.Add(id, new(id, NodeKind.Method, ShortLabel(methodLabel), moduleId));
             return id;

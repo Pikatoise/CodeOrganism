@@ -1,65 +1,107 @@
 import "./style.css";
-import { RuntimeMap, type Snapshot } from "./graph/map";
+import { RuntimeMap } from "./graph/map";
+import { isLibrary, StableLayout, type GraphNode, type Snapshot } from "./graph/layout";
+import { inspect, showDetails } from "./inspector";
+import { connectControls } from "./control";
 
 const status = document.querySelector<HTMLElement>("#source-status")!;
 const empty = document.querySelector<HTMLElement>("#map-empty")!;
-const ranking = document.querySelector<HTMLOListElement>("#cpu-ranking")!;
-const coverage = document.querySelector<HTMLElement>("#coverage")!;
-const windowLabel = document.querySelector<HTMLElement>("#window")!;
-const map = new RuntimeMap(document.querySelector<HTMLCanvasElement>("#runtime-map")!);
-const stream = new EventSource("/api/view/v1/events");
-const format = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
+const layout = new StableLayout();
+const expanded = new Set<string>();
+const map = new RuntimeMap(document.querySelector<HTMLCanvasElement>("#runtime-map")!, node => choose(node, node.expandable));
 let latest: Snapshot | undefined;
-stream.onopen = () => {
-  if (!latest) showStatus("idle", "No source connected");
-};
+let displayed: Snapshot | undefined;
+let selected: string | undefined;
+let paused = false;
+let online = false;
+let control = { state: "idle" };
 
-stream.onerror = () => showStatus("connecting", "Reconnecting to the local visualizer");
+const controls = connectControls(next => { control = next; updateStatus(); });
+const stream = new EventSource("/api/view/v1/events");
+stream.onopen = () => { online = true; updateStatus(); };
+stream.onerror = () => { online = false; updateStatus(); };
 stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
   const snapshot = JSON.parse(event.data) as Snapshot;
   if (latest?.sessionId === snapshot.sessionId && latest.version > snapshot.version) return;
+  const sameVersion = latest?.sessionId === snapshot.sessionId && latest.version === snapshot.version;
   latest = snapshot;
-  showStatus(snapshot.state, `${snapshot.source.label} · ${labels[snapshot.state]}`);
-  empty.hidden = snapshot.nodes.length > 0;
-  map.update(snapshot);
-  renderMeasurements(snapshot);
+  online = true;
+  controls.externalLive(snapshot.state === "live" || snapshot.state === "connecting");
+  updateStatus();
+  if (!paused && !sameVersion) apply(snapshot);
 });
+window.setInterval(updateStatus, 250);
 
-const labels = {
-  connecting: "Connecting",
-  live: "Live",
-  ended: "Disconnected",
-  failed: "Source unavailable",
-};
+pauseButton.addEventListener("click", () => {
+  paused = !paused;
+  map.pause(paused);
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  if (!paused && latest) {
+    if (displayed?.version !== latest.version || displayed.sessionId !== latest.sessionId) apply(latest);
+    else render();
+  }
+});
+document.querySelector("#zoom-in")!.addEventListener("click", () => map.zoomBy(1.25));
+document.querySelector("#zoom-out")!.addEventListener("click", () => map.zoomBy(1 / 1.25));
+document.querySelector("#reset-view")!.addEventListener("click", () => map.reset());
+
+function choose(node: GraphNode, toggle: boolean) {
+  if (!displayed) return;
+  const current = layout.project(displayed, expanded);
+  if (toggle) {
+    if (expanded.has(node.id)) expanded.delete(node.id);
+    else expanded.add(node.id);
+  } else if (node.parentId) {
+    expanded.add(node.parentId);
+    const parent = displayed.nodes.find(item => item.id === node.parentId);
+    if (parent && isLibrary(parent)) expanded.add(current.libraryId);
+  }
+  selected = node.id;
+  showDetails();
+  render();
+  if (!toggle) map.focus(node.id);
+}
+
+function apply(snapshot: Snapshot) {
+  if (displayed?.sessionId !== snapshot.sessionId) {
+    selected = undefined;
+    expanded.clear();
+  }
+  displayed = snapshot;
+  map.update(snapshot);
+  render();
+}
+
+function render() {
+  if (!displayed) return;
+  empty.hidden = displayed.nodes.length > 0;
+  pauseButton.disabled = displayed.nodes.length === 0;
+  const graph = layout.project(displayed, expanded);
+  map.show(graph, selected);
+  inspect(displayed, graph, selected, expanded, choose);
+}
+
+function updateStatus() {
+  if (!online) return showStatus("connecting", "Connecting to the local visualizer");
+  if (control.state === "detaching") return showStatus("connecting", "Detaching");
+  if (control.state === "connecting" && latest?.state !== "live") return showStatus("connecting", "Connecting to process");
+  if (latest?.state === "live") {
+    const stale = Date.now() - Date.parse(latest.lastUpdate) > 2_500;
+    return showStatus(stale ? "stale" : "live", `${latest.source.label} · ${stale ? "Waiting for updates" : "Live"}`);
+  }
+  const terminal: Record<string, string> = {
+    exited: "Process exited", detached: "Detached", restricted: "Access restricted",
+    unsupported: "Unsupported process", failed: "Source unavailable"
+  };
+  if (terminal[control.state]) return showStatus(control.state, terminal[control.state]);
+  if (latest?.endReason === "target-exited") return showStatus("exited", "Process exited");
+  if (latest?.state === "failed") return showStatus("failed", latest.endReason === "source-timeout" ? "Source stopped sending updates" : "Source unavailable");
+  if (latest?.state === "connecting") return showStatus("connecting", "Connecting to process");
+  return showStatus("idle", latest ? "Disconnected" : "No source connected");
+}
 
 function showStatus(state: string, label: string) {
   status.dataset.state = state;
   if (status.textContent !== label) status.textContent = label;
-}
-
-function renderMeasurements(snapshot: Snapshot) {
-  const interval = (snapshot.endMs ?? 0) - (snapshot.startMs ?? 0);
-  const methods = new Map(snapshot.nodes.filter(node => node.kind === "method").map(node => [node.id, node.label]));
-  const rows = snapshot.measurements
-    .filter(entry => entry.metric === "cpu" && entry.value != null && methods.has(entry.nodeId))
-    .sort((a, b) => b.value! - a.value!)
-    .slice(0, 8)
-    .map(entry => {
-      const row = document.createElement("li");
-      const name = document.createElement("span");
-      const value = document.createElement("span");
-      name.textContent = methods.get(entry.nodeId)!;
-      value.textContent = interval > 0 ? `${format.format(entry.value! * 1_000 / interval)} ms/s` : "Unavailable";
-      if (!entry.complete) value.textContent += " (partial)";
-      row.append(name, value);
-      return row;
-    });
-  ranking.replaceChildren(...rows);
-  windowLabel.textContent = interval > 0 ? `CPU milliseconds per second · ${interval} ms window` : "CPU milliseconds per second";
-  const messages: string[] = [];
-  if (snapshot.loss.some(item => item.kind === "source-events")) messages.push("Measurement loss in this interval.");
-  if (snapshot.loss.some(item => item.kind === "unresolved-attribution")) messages.push("Some CPU samples could not be attributed.");
-  if (snapshot.gaps > 0) messages.push(`${snapshot.gaps} interval gap${snapshot.gaps === 1 ? "" : "s"} in this session.`);
-  coverage.textContent = messages.join(" ");
-  if (rows.length === 0 && snapshot.state === "live") coverage.textContent ||= "No method sample in this interval.";
 }

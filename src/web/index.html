@@ -12,20 +12,42 @@
       <p id="source-status" role="status" data-state="connecting">Connecting to the local visualizer</p>
     </header>
     <main>
-      <section class="map" aria-labelledby="map-title">
+      <section class="workspace" aria-labelledby="map-title">
+        <form id="attach-form" class="attach">
+          <div><label for="process">Process</label><select id="process"><option value="">Loading processes</option></select></div>
+          <div><label for="pid">Or enter PID</label><input id="pid" type="number" inputmode="numeric" min="1" step="1" /></div>
+          <button id="refresh-processes" type="button">Refresh</button>
+          <button id="attach" type="submit" class="primary" disabled>Attach</button>
+          <button id="detach" type="button" disabled>Detach</button>
+          <p id="control-message" role="status"></p>
+        </form>
         <div class="map-header">
-          <h2 id="map-title">Runtime map</h2>
-          <p>CPU activity · estimated</p>
+          <div><h2 id="map-title">Runtime map</h2><p>CPU activity · estimated</p></div>
+          <div class="map-controls">
+            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button id="reset-view" type="button">Reset view</button>
+            <button id="pause" type="button" disabled>Pause</button>
+          </div>
         </div>
-        <canvas id="runtime-map" aria-hidden="true"></canvas>
-        <p class="empty" id="map-empty">Waiting for observations from a local connector.</p>
-        <div class="legend"><span class="pulse"></span> CPU activity <span class="branch"></span> Observed stack link</div>
+        <div class="map">
+          <canvas id="runtime-map" tabindex="0" aria-label="Runtime map. Use arrow keys to pan and plus or minus to zoom."></canvas>
+          <p class="empty" id="map-empty">Attach to a running .NET process to see its activity.</p>
+        </div>
+        <p class="legend"><span class="pulse" aria-hidden="true"></span> Pulse: CPU activity <span class="branch" aria-hidden="true"></span> Line: observed stack link</p>
       </section>
-      <aside class="inspector" aria-labelledby="ranking-title">
-        <h2 id="ranking-title">Top methods</h2>
-        <p id="window">CPU milliseconds per second</p>
+      <aside class="inspector" aria-label="Map inspection">
+        <h2 id="ranking-title">Top modules</h2>
+        <p>Estimated CPU milliseconds per second</p>
         <ol id="cpu-ranking"></ol>
         <p id="coverage" class="coverage"></p>
+        <details id="details">
+          <summary>Inspector</summary>
+          <p id="selection-name">Select a node to inspect it.</p>
+          <dl id="selection-values"></dl>
+        </details>
+        <h3>Groups</h3>
+        <ul id="groups"></ul>
       </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>

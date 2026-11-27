@@ -1,75 +1,97 @@
-type GraphNode = { id: string; kind: "module" | "method" | "unresolved"; label: string; parentId?: string | null };
-type Relationship = { sourceId: string; targetId: string };
-type Measurement = { nodeId: string; metric: string; value: number | null; complete: boolean };
-export type Snapshot = {
-  sessionId: string;
-  version: number;
-  state: "connecting" | "live" | "ended" | "failed";
-  source: { label: string };
-  startMs: number | null;
-  endMs: number | null;
-  nodes: GraphNode[];
-  relationships: Relationship[];
-  measurements: Measurement[];
-  loss: { kind: string }[];
-  gaps: number;
-};
+import type { Point, PositionedNode, Projection, Snapshot } from "./layout";
 
-type Point = { x: number; y: number };
-type VisibleNode = { node: GraphNode; center: Point; heat: number; lastPulse: number };
-
+type Heat = { amount: number; since: number };
 export class RuntimeMap {
   private readonly context: CanvasRenderingContext2D;
   private readonly motion = matchMedia("(prefers-reduced-motion: reduce)");
-  private readonly positions = new Map<string, VisibleNode>();
-  private edges: Relationship[] = [];
-  private sessionId = "";
+  private readonly heat = new Map<string, Heat>();
+  private graph?: Projection;
+  private selected?: string;
   private size = { x: 0, y: 0 };
+  private shift = { x: 0, y: 0 };
   private scale = 1;
+  private zoom = 1;
+  private frozenAt?: number;
+  private sessionId = "";
+  private pointer?: { x: number; y: number; dx: number; dy: number; moved: boolean };
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly select: (node: PositionedNode) => void) {
     this.context = canvas.getContext("2d")!;
     new ResizeObserver(() => this.resize()).observe(canvas);
+    canvas.addEventListener("pointerdown", event => {
+      this.pointer = { x: event.clientX, y: event.clientY, dx: this.shift.x, dy: this.shift.y, moved: false };
+      canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener("pointermove", event => {
+      if (!this.pointer) return;
+      const dx = event.clientX - this.pointer.x, dy = event.clientY - this.pointer.y;
+      this.pointer.moved ||= Math.hypot(dx, dy) > 4;
+      if (this.pointer.moved) this.shift = { x: this.pointer.dx + dx, y: this.pointer.dy + dy };
+    });
+    canvas.addEventListener("pointerup", event => {
+      if (this.pointer && !this.pointer.moved) {
+        const rect = canvas.getBoundingClientRect();
+        this.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+      }
+      this.pointer = undefined;
+    });
+    canvas.addEventListener("pointercancel", () => { this.pointer = undefined; });
+    canvas.addEventListener("wheel", event => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      this.zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
+    }, { passive: false });
+    canvas.addEventListener("keydown", event => {
+      const offsets: Record<string, Point> = { ArrowLeft: { x: -30, y: 0 }, ArrowRight: { x: 30, y: 0 },
+        ArrowUp: { x: 0, y: -30 }, ArrowDown: { x: 0, y: 30 } };
+      const offset = offsets[event.key];
+      if (offset) {
+        event.preventDefault();
+        this.shift = { x: this.shift.x + offset.x, y: this.shift.y + offset.y };
+      } else if (event.key === "+" || event.key === "-") {
+        event.preventDefault();
+        this.zoomBy(event.key === "+" ? 1.2 : 1 / 1.2);
+      }
+    });
     requestAnimationFrame(this.frame);
   }
 
   update(snapshot: Snapshot) {
     if (this.sessionId !== snapshot.sessionId) {
       this.sessionId = snapshot.sessionId;
-      this.positions.clear();
+      this.heat.clear();
+      this.reset();
     }
-    this.edges = snapshot.relationships;
-    let moduleNumber = [...this.positions.values()].filter(item => item.node.kind === "module").length;
-    const sorted = [...snapshot.nodes].sort((a, b) => Number(b.kind === "module") - Number(a.kind === "module"));
-    for (const node of sorted) {
-      const prior = this.positions.get(node.id);
-      if (prior) {
-        prior.node = node;
-        continue;
-      }
-      let center: Point;
-      if (node.kind === "module") {
-        const anchors = [[.48, .51], [.76, .32], [.24, .3], [.74, .72], [.25, .72], [.49, .22]];
-        const anchor = anchors[moduleNumber++] ?? [.2 + hash(node.id) * .6, .2 + hash(node.id + "#") * .6];
-        center = { x: anchor[0], y: anchor[1] };
-      } else {
-        const parent = node.parentId ? this.positions.get(node.parentId)?.center : undefined;
-        const angle = hash(node.id) * Math.PI * 2;
-        const radius = .10 + hash(node.id + "#") * .13;
-        center = parent
-          ? { x: clamp(parent.x + Math.cos(angle) * radius), y: clamp(parent.y + Math.sin(angle) * radius) }
-          : { x: .84, y: .83 };
-      }
-      this.positions.set(node.id, { node, center, heat: 0, lastPulse: 0 });
-    }
-    const now = performance.now();
+    if (snapshot.state !== "live") return;
     const duration = (snapshot.endMs ?? 0) - (snapshot.startMs ?? 0);
+    if (duration <= 0) return;
+    const now = performance.now();
     for (const measure of snapshot.measurements) {
-      const node = this.positions.get(measure.nodeId);
-      if (!node || measure.metric !== "cpu" || !measure.value || duration <= 0) continue;
-      node.lastPulse = now;
-      node.heat = Math.min(1, Math.sqrt(measure.value / duration));
+      if (measure.metric === "cpu" && measure.value && measure.value > 0)
+        this.heat.set(measure.nodeId, { amount: Math.min(1, Math.sqrt(measure.value / duration)), since: now });
     }
+  }
+
+  show(graph: Projection, selected?: string) { this.graph = graph; this.selected = selected; }
+  pause(paused: boolean) { this.frozenAt = paused ? performance.now() : undefined; }
+  zoomBy(factor: number) { this.zoom = Math.max(.55, Math.min(3.5, this.zoom * factor)); }
+  reset() { this.zoom = 1; this.shift = { x: 0, y: 0 }; }
+  focus(id: string) {
+    const found = this.graph?.nodes.find(node => node.id === id);
+    if (!found) return;
+    this.shift = { x: (0.5 - found.point.x) * this.size.x * this.zoom,
+      y: (0.5 - found.point.y) * this.size.y * this.zoom };
+  }
+
+  private pick(point: Point) {
+    let distance = 21;
+    let picked: PositionedNode | undefined;
+    for (const node of this.graph?.nodes ?? []) {
+      const hit = this.screen(node.point);
+      const next = Math.hypot(point.x - hit.x, point.y - hit.y);
+      if (next < distance) { distance = next; picked = node; }
+    }
+    if (picked) this.select(picked);
   }
 
   private resize() {
@@ -79,63 +101,73 @@ export class RuntimeMap {
     this.canvas.height = this.size.y * this.scale;
   }
 
-  private readonly frame = (now: number) => {
+  private screen(point: Point) {
+    return { x: (.5 + (point.x - .5) * this.zoom) * this.size.x + this.shift.x,
+      y: (.5 + (point.y - .5) * this.zoom) * this.size.y + this.shift.y };
+  }
+
+  private readonly frame = (frameTime: number) => {
     const context = this.context;
+    const now = this.frozenAt ?? frameTime;
     context.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     context.clearRect(0, 0, this.size.x, this.size.y);
-    const point = (item: VisibleNode) => ({ x: item.center.x * this.size.x, y: item.center.y * this.size.y });
-    for (const edge of this.edges) {
-      const source = this.positions.get(edge.sourceId);
-      const target = this.positions.get(edge.targetId);
-      if (!source || !target) continue;
-      const a = point(source);
-      const b = point(target);
-      const heat = Math.max(this.intensity(source, now), this.intensity(target, now));
-      context.beginPath();
-      context.moveTo(a.x, a.y);
-      if (source === target) {
-        context.bezierCurveTo(a.x - 25, a.y - 44, a.x + 32, a.y - 37, a.x, a.y);
-      } else {
-        const curl = (b.y - a.y) * .35 + 15;
-        context.bezierCurveTo(a.x + curl, a.y - curl, b.x - curl, b.y + curl, b.x, b.y);
+    const graph = this.graph;
+    if (graph) {
+      const index = new Map(graph.nodes.map(node => [node.id, node]));
+      for (const edge of graph.edges) {
+        const source = index.get(edge.sourceId), target = index.get(edge.targetId);
+        if (!source || !target) continue;
+        const a = this.screen(source.point), b = this.screen(target.point);
+        const heat = Math.max(this.intensity(source, now), this.intensity(target, now));
+        context.beginPath(); context.moveTo(a.x, a.y);
+        if (source === target) context.bezierCurveTo(a.x - 26, a.y - 43, a.x + 33, a.y - 36, a.x, a.y);
+        else {
+          const curl = (b.y - a.y) * .38 + 15;
+          context.bezierCurveTo(a.x + curl, a.y - curl, b.x - curl, b.y + curl, b.x, b.y);
+        }
+        context.shadowColor = "#b168ff";
+        context.shadowBlur = 6 * heat;
+        context.strokeStyle = `rgba(199, 154, 255, ${.25 + .59 * heat})`;
+        context.lineWidth = 1 + heat;
+        context.stroke();
       }
-      context.shadowColor = "#b168ff";
-      context.shadowBlur = 8 * heat;
-      context.strokeStyle = `rgba(199, 154, 255, ${.23 + .62 * heat})`;
-      context.lineWidth = 1 + 1.1 * heat;
-      context.stroke();
-    }
 
-    for (const node of this.positions.values()) {
-      const p = point(node);
-      const heat = this.intensity(node, now);
-      const radius = node.node.kind === "module" ? 6 : 3.2;
-      const blink = this.motion.matches ? 1 : .75 + .25 * Math.sin(now / (190 - 95 * heat));
-      context.beginPath();
-      context.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      context.shadowColor = "#ce91ff";
-      context.shadowBlur = 3 + 24 * heat * blink;
-      context.fillStyle = `rgba(225, 188, 255, ${.42 + .58 * heat * blink})`;
-      context.fill();
-      context.shadowBlur = 0;
-      context.font = node.node.kind === "module" ? "600 13px system-ui" : "12px system-ui";
-      context.fillStyle = heat > .18 || node.node.kind === "module" ? "#f0d9ff" : "#b6a0cb";
-      context.fillText(node.node.label, p.x + 10, p.y + 4, Math.max(30, this.size.x - p.x - 16));
+      for (const node of graph.nodes) {
+        const p = this.screen(node.point);
+        const heat = this.intensity(node, now);
+        const focused = node.id === this.selected;
+        const radius = node.kind === "module" || node.kind === "library" ? 6 : 3.5;
+        const pulse = this.motion.matches ? 1 : .71 + .29 * Math.sin(now / (210 - heat * 125));
+        context.beginPath();
+        context.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        context.shadowColor = "#ce91ff";
+        context.shadowBlur = 2 + 25 * heat * pulse;
+        context.fillStyle = `rgba(230, 196, 255, ${.47 + .53 * heat * pulse})`;
+        context.fill();
+        context.shadowBlur = 0;
+        if (focused) {
+          context.beginPath(); context.arc(p.x, p.y, radius + 8, 0, Math.PI * 2);
+          context.strokeStyle = "#edc8ff"; context.lineWidth = 1; context.stroke();
+        }
+        context.font = node.kind === "method" ? "12px system-ui" : "600 13px system-ui";
+        context.fillStyle = focused || heat > .18 ? "#f5dfff" : "#c1abcf";
+        const left = p.x > this.size.x * .71;
+        context.textAlign = left ? "right" : "left";
+        const space = left ? p.x - 16 : this.size.x - p.x - 16;
+        if (space > 28) context.fillText(node.label, p.x + (left ? -10 : 10), p.y - 9, space);
+      }
     }
     requestAnimationFrame(this.frame);
   };
 
-  private intensity(node: VisibleNode, now: number) {
-    return node.heat * Math.max(0, 1 - (now - node.lastPulse) / 2_000);
+  private intensity(node: PositionedNode, now: number): number {
+    if (node.kind === "library")
+      return Math.max(0, ...(this.graph?.libraryModules ?? []).map(id => this.nodeHeat(id, now)));
+    return this.nodeHeat(node.id, now);
   }
-}
 
-function hash(value: string) {
-  let result = 2_166_136_261;
-  for (const char of value) result = Math.imul(result ^ char.charCodeAt(0), 16_777_619);
-  return (result >>> 0) / 2 ** 32;
-}
-
-function clamp(value: number) {
-  return Math.max(.10, Math.min(.86, value));
+  private nodeHeat(id: string, now: number): number {
+    const entry = this.heat.get(id);
+    return entry ? entry.amount * Math.max(0, 1 - (now - entry.since) / 2_000) : 0;
+  }
 }

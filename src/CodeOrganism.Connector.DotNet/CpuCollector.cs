@@ -6,7 +6,8 @@ using Microsoft.Diagnostics.Tracing.Session;
 
 namespace CodeOrganism.Connector.DotNet;
 
-public sealed record CpuMethod(long ModuleId, long MethodId, string Name, string TypeName, string Signature, string? ModuleName = null);
+public sealed record CpuMethod(long ModuleId, long MethodId, string Name, string TypeName, string Signature,
+    string? ModuleName = null, string? Library = null);
 public sealed record CpuSample(long TimestampMs, CpuMethod? Method, double CpuMilliseconds);
 public sealed record CpuStack(long TimestampMs, CpuMethod?[] Frames);
 public sealed record CpuCaptureResult(int Samples, int StackWalks, int LostEvents, bool TargetExited, bool MetadataTruncated);
@@ -49,7 +50,7 @@ public static class CpuCollector
                 return new(0, 0, 0, true, false);
 
             var methods = new SortedList<ulong, CodeRange>();
-            var modules = new Dictionary<long, string>();
+            var modules = new Dictionary<long, (string Name, string? Library)>();
             var samples = 0;
             var stackWalks = 0;
             var truncated = false;
@@ -109,19 +110,24 @@ public static class CpuCollector
             CpuMethod? Resolve(ulong address)
             {
                 var method = FindMethod(methods, address);
-                if (method is null || !modules.TryGetValue(method.ModuleId, out var name) || name == method.ModuleName)
+                if (method is null || !modules.TryGetValue(method.ModuleId, out var module) || module.Name == method.ModuleName)
                     return method;
 
                 var position = FindPosition(methods, address);
-                var updated = method with { ModuleName = name };
+                var updated = method with { ModuleName = module.Name, Library = module.Library };
                 methods[methods.Keys[position]] = methods.Values[position] with { Method = updated };
                 return updated;
             }
 
             void IndexModule(ModuleLoadUnloadTraceData data)
             {
-                if (data.ProcessID == processId && modules.Count < 2_000 && !string.IsNullOrEmpty(data.ModuleILPath))
-                    modules[data.ModuleID] = Path.GetFileNameWithoutExtension(data.ModuleILPath);
+                if (data.ProcessID != processId || modules.Count >= 2_000 || string.IsNullOrEmpty(data.ModuleILPath))
+                    return;
+
+                var path = data.ModuleILPath.Replace('\\', '/');
+                var library = path.Contains("/dotnet/shared/", StringComparison.OrdinalIgnoreCase) ? "framework"
+                    : path.Contains("/.nuget/packages/", StringComparison.OrdinalIgnoreCase) ? "third-party" : null;
+                modules[data.ModuleID] = (Path.GetFileNameWithoutExtension(path), library);
             }
 
             void IndexMethod(MethodLoadUnloadVerboseTraceData data)
@@ -136,8 +142,9 @@ public static class CpuCollector
                     return;
                 }
 
+                var module = modules.GetValueOrDefault(data.ModuleID);
                 var method = new CpuMethod(data.ModuleID, data.MethodID, data.MethodName, data.MethodNamespace,
-                    data.MethodSignature, modules.GetValueOrDefault(data.ModuleID));
+                    data.MethodSignature, module.Name, module.Library);
                 methods[address] = new(address + (ulong)data.MethodSize, method);
             }
         }
