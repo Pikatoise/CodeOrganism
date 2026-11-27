@@ -64,4 +64,19 @@ public sealed class ManagedCodeIndex
             return resolved;
         }
     }
+
+    public CpuMethod? FindMethod(long methodId)
+    {
+        lock (gate)
+        {
+            foreach (var range in methods.Values)
+            {
+                if (range.Method.MethodId != methodId) continue;
+                return modules.TryGetValue(range.Method.ModuleId, out var module)
+                    ? range.Method with { ModuleName = module.Name, Library = module.Library }
+                    : range.Method;
+            }
+            return null;
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics.Tracing;
+using CodeOrganism.CallProbes;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.Parsers;
@@ -13,14 +14,18 @@ public static class AllocationCollector
     private static readonly EventPipeProvider Provider = new(ClrTraceEventParser.ProviderName, EventLevel.Verbose,
         (long)ClrTraceEventParser.Keywords.GC);
 
-    public static async Task CaptureAsync(int pid, Action<AllocationSample> publish, Action markLoss, CancellationToken stop)
+    public static async Task CaptureAsync(int pid, Action<AllocationSample> publish, Action markLoss,
+        CancellationToken stop, Action<EntryCounters.Checkpoint>? checkpoint = null)
     {
         var client = new DiagnosticsClient(pid);
         while (!stop.IsCancellationRequested)
         {
-            using var session = await client.StartEventPipeSessionAsync(Provider, false, 16, stop);
+            EventPipeProvider[] providers = checkpoint is null ? [Provider] : [Provider, CallCollector.Provider];
+            using var session = await client.StartEventPipeSessionAsync(providers, false, 16, stop);
             // TraceLog exposes EventPipe stack instruction addresses. ETW provides the shared managed-code identities.
             using var source = TraceLog.CreateFromEventPipeSession(session);
+            if (checkpoint is not null)
+                source.AllEvents += entry => CallCollector.Read(entry, checkpoint);
             var lastLoss = 0;
             source.Clr.GCAllocationTick += entry =>
             {

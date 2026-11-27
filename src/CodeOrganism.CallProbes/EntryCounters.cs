@@ -7,6 +7,8 @@ namespace CodeOrganism.CallProbes;
 public sealed class EntryCounters : IAsyncDisposable
 {
     public const string ProviderName = "CodeOrganism-CallProbes";
+    public const string ProviderGuid = "7521be90-ee75-5c0b-5393-25f1d58de01d";
+    public const int CheckpointEventId = 1;
     public const int CheckpointIntervalMs = 250;
     public const int MaxMethods = 32;
 
@@ -89,18 +91,18 @@ public sealed class EntryCounters : IAsyncDisposable
 
         internal CheckpointEntry Snapshot() => identity with { MethodId = method.MethodHandle.Value.ToInt64(), Count = count };
 
-        private static string Short(string name) => name.Length <= 96 ? name : name[..96];
+        private static string Short(string name) => name.Length <= 48 ? name : name[..48];
     }
 
     public sealed record Checkpoint(string SourceId, long Sequence, long TimestampMs, CheckpointEntry[] Entries);
     public sealed record CheckpointEntry(long MethodId, Guid ModuleId, string ModuleName, string MethodName, long Count);
 
-    [EventSource(Name = ProviderName)]
-    private sealed class ProbeEvents() : EventSource(EventSourceSettings.EtwSelfDescribingEventFormat)
+    [EventSource(Name = ProviderName, Guid = ProviderGuid)]
+    private sealed class ProbeEvents : EventSource
     {
         public static readonly ProbeEvents Log = new();
 
-        [Event(1, Level = EventLevel.Informational)]
-        public void Checkpoint(string payload) => WriteEvent(1, payload);
+        [Event(CheckpointEventId, Level = EventLevel.Informational)]
+        public void Checkpoint(string payload) => WriteEvent(CheckpointEventId, payload);
     }
 }
