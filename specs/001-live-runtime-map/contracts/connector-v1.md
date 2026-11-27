@@ -44,7 +44,7 @@ First batch:
 }
 ```
 
-Units are `ms` for CPU, `byte` for allocations and `count` for calls. Publish no more than one measurement per metric/node/interval. Omitted unsupported metrics are unavailable. Omitted measurements for a supported metric are unavailable unless explicitly published as zero. Loss entries carry `kind` (`source-events`, `source-gap`, `unresolved-attribution` or `topology-limit`) with optional affected metric and known count.
+Units are `ms` for CPU, `byte` for allocations and `count` for calls. Relationship entries contain `sourceId`, `targetId` and `evidence` (`stack-adjacency` or `instrumented-call`). Publish no more than one measurement per metric/node/interval. Omitted unsupported metrics are unavailable. Omitted measurements for a supported metric are unavailable unless explicitly published as zero. Loss entries carry `kind` (`source-events`, `source-gap`, `unresolved-attribution` or `topology-limit`), optional `metric` and optional `count`.
 
 Sequence starts at 1 and increases per source. Retrying the latest accepted sequence with the same batch is idempotent. A conflicting replay is rejected. Following overload, retry the unaccepted batch within the producer's bounded queue. If it must be dropped, skip its sequence and report the resulting gap on the next accepted batch. An exact cumulative interval may span missed checkpoints only when coverage and endpoints are both known. Do not split such a count into fabricated shorter windows.
 
