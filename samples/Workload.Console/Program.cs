@@ -1,16 +1,32 @@
 using System.Text.Json;
 using CodeOrganism.Workload;
 
-if (args is ["--benchmark", var blocksText] && int.TryParse(blocksText, out var blocks) && blocks > 0)
+if (args is ["--benchmark", _, ..] && args.Length is 2 or 3 &&
+    int.TryParse(args[1], out var blocks) && blocks > 0 &&
+    (args.Length == 2 || args[2] == "--pipe"))
 {
-    var elapsed = CpuScenario.Measure(blocks);
-    Console.WriteLine(JsonSerializer.Serialize(new { elapsedMs = elapsed.TotalMilliseconds, blocks }));
+    CpuScenario.WarmUp();
+    if (args.Length == 2)
+        MeasureAndReport();
+    else
+    {
+        Console.WriteLine(JsonSerializer.Serialize(new { pid = Environment.ProcessId, ready = true }));
+        while (Console.ReadLine() == "run")
+            MeasureAndReport();
+    }
+
     return 0;
+
+    void MeasureAndReport()
+    {
+        var elapsed = CpuScenario.Measure(blocks);
+        Console.WriteLine(JsonSerializer.Serialize(new { elapsedMs = elapsed.TotalMilliseconds, blocks }));
+    }
 }
 
 if (args.Length != 0)
 {
-    Console.Error.WriteLine("Usage: Workload.Console [--benchmark <positive-block-count>]");
+    Console.Error.WriteLine("Usage: Workload.Console [--benchmark <positive-block-count> [--pipe]]");
     return 2;
 }
 

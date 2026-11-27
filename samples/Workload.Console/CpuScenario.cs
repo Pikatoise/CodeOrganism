@@ -32,11 +32,14 @@ public static class CpuScenario
         return Task.WhenAll(busy, idle);
     }
 
+    public static void WarmUp()
+    {
+        for (var i = 0; i < 500; i++)
+            sink = BusyBeta(BusyAlpha(sink));
+    }
+
     public static TimeSpan Measure(int blocks)
     {
-        for (var i = 0; i < 100; i++)
-            sink = BusyBeta(BusyAlpha(sink));
-
         var start = Stopwatch.GetTimestamp();
         for (var i = 0; i < blocks; i++)
             sink = BusyBeta(BusyAlpha(sink));
