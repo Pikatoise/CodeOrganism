@@ -51,11 +51,15 @@ public static class AllocationCollector
             }
 
             using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            try { await session.StopAsync(shutdown.Token); }
-            catch (Exception error) when (error is DiagnosticsClientException or IOException or OperationCanceledException) { }
+            try
+            {
+                await session.StopAsync(shutdown.Token);
+                await reader.WaitAsync(shutdown.Token);
+            }
+            catch (Exception error) when (error is DiagnosticsClientException or IOException or FormatException or OperationCanceledException) { }
             finally { session.Dispose(); }
             try { await reader; }
-            catch (Exception error) when (error is IOException or ObjectDisposedException) { }
+            catch (Exception error) when (error is IOException or ObjectDisposedException or FormatException) { }
             if (!stop.IsCancellationRequested) markLoss();
         }
     }

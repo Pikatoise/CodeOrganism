@@ -102,8 +102,10 @@ public static class ObservationPublisher
         {
             try { await AllocationCollector.CaptureAsync(pid, buffer.Add, buffer.MarkAllocationLoss, captureStop.Token); }
             catch (OperationCanceledException) when (captureStop.IsCancellationRequested) { }
-            catch (Exception error) when (error is DiagnosticsClientException or IOException or ObjectDisposedException)
+            catch (Exception error) when (error is DiagnosticsClientException or IOException or ObjectDisposedException or FormatException)
             {
+                // A target that exits mid-block can leave a truncated EventPipe stream.
+                // CPU collection owns the target lifecycle and still reports that exit.
                 if (!captureStop.IsCancellationRequested) buffer.MarkAllocationLoss();
             }
         }
