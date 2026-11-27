@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CodeOrganism.Connector.DotNet/CodeOrganism.Connector.DotNet.csproj" />
+    <Project Path="src/CodeOrganism.Host/CodeOrganism.Host.csproj" />
+    <Project Path="src/CodeOrganism.Protocol/CodeOrganism.Protocol.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CodeOrganism.Tests/CodeOrganism.Tests.csproj" />
+    <Project Path="tests/CodeOrganism.Windows.Tests/CodeOrganism.Windows.Tests.csproj" />
+  </Folder>
+</Solution>

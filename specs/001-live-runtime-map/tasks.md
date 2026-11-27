@@ -4,9 +4,9 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create `CodeOrganism.slnx` with the host, protocol, Windows connector and test projects under `src/` and `tests/`.
-- [ ] T002 [P] Scaffold TypeScript and Vite in `src/web/package.json` and `src/web/vite.config.ts` and document the local toolchain in `README.md`.
-- [ ] T003 [P] Add the confirmed MIT license in `LICENSE`.
+- [X] T001 Create `CodeOrganism.slnx` with the host, protocol, Windows connector and test projects under `src/` and `tests/`.
+- [X] T002 [P] Scaffold TypeScript and Vite in `src/web/package.json` and `src/web/vite.config.ts` and document the local toolchain in `README.md`.
+- [X] T003 [P] Add the confirmed MIT license in `LICENSE`.
 
 ## Phase 2: Foundational
 

@@ -1,0 +1,16 @@
+{
+  "name": "codeorganism-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vite": "8.4.0"
+  }
+}

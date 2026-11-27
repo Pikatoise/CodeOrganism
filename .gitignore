@@ -1,0 +1,24 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+.vs/
+
+# Browser build
+node_modules/
+dist/
+coverage/
+playwright-report/
+*.log
+
+# Local configuration and tools
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.dotnet/
+Thumbs.db
+.DS_Store
