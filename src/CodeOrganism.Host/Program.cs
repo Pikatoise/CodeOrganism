@@ -9,9 +9,10 @@ builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0
 
 var limits = new ConnectorLimits(256 * 1024, 2_000, 6_000, 100, 10_000);
 var bootstrapToken = Environment.GetEnvironmentVariable("CODEORGANISM_PRODUCER_TOKEN");
-var credential = new ProducerCredential(string.IsNullOrWhiteSpace(bootstrapToken)
+var producerToken = string.IsNullOrWhiteSpace(bootstrapToken)
     ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
-    : bootstrapToken);
+    : bootstrapToken;
+var credential = new ProducerCredential(producerToken);
 builder.Services.AddSingleton(new SessionStore(TimeProvider.System, limits));
 
 var app = builder.Build();
@@ -50,5 +51,8 @@ if (webAssets is not null)
 app.MapGet("/health", () => Results.Ok());
 var store = app.Services.GetRequiredService<SessionStore>();
 new ConnectorEndpoints(store, limits, credential).Map(app);
+var supervisor = new FirstPartyConnector(FirstPartyConnector.FindExecutable(app.Environment), producerToken, store);
+new LocalViewControl(supervisor).Map(app);
+app.Lifetime.ApplicationStopping.Register(supervisor.Detach);
 app.MapGet("/api/view/v1/events", (HttpContext context) => SnapshotStream.WriteAsync(context, store));
 app.Run();

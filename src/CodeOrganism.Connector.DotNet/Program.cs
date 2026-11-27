@@ -4,6 +4,25 @@ using System.Text.Json;
 using CodeOrganism.Connector.DotNet;
 using CodeOrganism.Protocol;
 
+if (args is ["list-targets"])
+{
+    if (!OperatingSystem.IsWindows())
+        return 2;
+    Console.WriteLine(JsonSerializer.Serialize(AttachSession.Discover(), ConnectorMessages.Json));
+    return 0;
+}
+
+if (args is ["attach-stdio"])
+    return OperatingSystem.IsWindows() ? await AttachSession.SuperviseAsync() : 2;
+
+if (args is ["etw-worker", var pipe, var nonce, var pidArg, var ticksArg, var cadenceArg, var supervisorArg] &&
+    int.TryParse(pidArg, out var workerPid) && long.TryParse(ticksArg, out var workerTicks) &&
+    workerTicks > 0 && workerTicks <= DateTime.MaxValue.Ticks &&
+    int.TryParse(cadenceArg, out var workerCadence) && int.TryParse(supervisorArg, out var supervisorPid))
+    return OperatingSystem.IsWindows()
+        ? await EtwWorker.RunAsync(pipe, nonce, workerPid, new DateTime(workerTicks, DateTimeKind.Utc), workerCadence, supervisorPid)
+        : 2;
+
 if (args is ["publish-cpu", var targetText, var originText, var durationText] &&
     int.TryParse(targetText, out var targetPid) && targetPid > 0 &&
     Uri.TryCreate(originText, UriKind.Absolute, out var origin) &&
@@ -25,6 +44,10 @@ if (args is ["publish-cpu", var targetText, var originText, var durationText] &&
     {
         Console.Error.WriteLine($"CPU publish failed: {error.Message}");
         return 1;
+    }
+    catch (OperationCanceledException)
+    {
+        return 0;
     }
 }
 

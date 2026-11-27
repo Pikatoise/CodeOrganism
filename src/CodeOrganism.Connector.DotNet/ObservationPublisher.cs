@@ -6,58 +6,86 @@ namespace CodeOrganism.Connector.DotNet;
 
 public static class ObservationPublisher
 {
-    public static async Task<CpuCaptureResult> RunAsync(ConnectorClient client, int pid, DateTime startUtc, CancellationToken stop)
+    public static async Task<CpuCaptureResult> RunAsync(ConnectorClient client, int pid, DateTime startUtc, CancellationToken stop,
+        Func<int, Func<ConnectorBatch, CancellationToken, Task>, CancellationToken, Task<CpuCaptureResult>>? collect = null)
     {
         using var target = Process.GetProcessById(pid);
         var registration = new Registration(Guid.NewGuid().ToString("N"), ConnectorMessages.Version,
             new($"dotnet-{pid}-{startUtc.Ticks}", target.ProcessName, $"PID {pid}"),
             [new(Metric.Cpu, "ms", "windows-etw-on-cpu-sampling", Quality.Estimated)]);
-        var reply = await client.RegisterAsync(registration, stop);
-        var session = reply.Session ?? throw ConnectionError(reply);
+        RegisteredSession? session = collect is null ? await RegisterAsync(stop) : null;
+        var reason = EndReason.ProducerError;
+        var cadence = Math.Max(200, session?.Limits.MinIntervalMs ?? 0);
+        try
+        {
+            var result = collect is null
+                ? await CollectBatchesAsync(pid, startUtc, cadence, Publish, stop)
+                : await collect(cadence, Publish, stop);
+            reason = result.TargetExited ? EndReason.TargetExited : EndReason.Detached;
+            return result;
+        }
+        catch (AttachException error) when (error.Code == "target-exited")
+        {
+            reason = EndReason.TargetExited;
+            throw;
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            reason = EndReason.Detached;
+            throw;
+        }
+        finally
+        {
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            try
+            {
+                if (session is not null)
+                    await client.EndAsync(session.SessionId, new(reason), cleanup.Token);
+            }
+            catch (OperationCanceledException) when (cleanup.IsCancellationRequested) { }
+        }
+
+        async Task Publish(ConnectorBatch batch, CancellationToken active)
+        {
+            session ??= await RegisterAsync(active);
+            var published = await client.PublishAsync(session.SessionId, batch, active);
+            if (!published.IsSuccess && published.Status != HttpStatusCode.TooManyRequests && (int)published.Status < 500)
+                throw ConnectionError(published);
+        }
+
+        async Task<RegisteredSession> RegisterAsync(CancellationToken active)
+        {
+            var reply = await client.RegisterAsync(registration, active);
+            return reply.Session ?? throw ConnectionError(reply);
+        }
+    }
+
+    public static async Task<CpuCaptureResult> CollectBatchesAsync(int pid, DateTime startUtc, int cadence,
+        Func<ConnectorBatch, CancellationToken, Task> publish, CancellationToken stop)
+    {
         var buffer = new CpuBatchBuffer(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         using var captureStop = CancellationTokenSource.CreateLinkedTokenSource(stop);
         var capture = Task.Factory.StartNew(
             () => CpuCollector.Capture(pid, startUtc, buffer.Add, captureStop.Token, buffer.Add),
             CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        var reason = EndReason.ProducerError;
-        var cadence = Math.Max(200, session.Limits.MinIntervalMs);
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(cadence));
             while (!capture.IsCompleted && await WaitForTickAsync(timer, stop))
             {
-                var batch = buffer.Take(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cadence);
-                if (batch is null)
-                    continue;
-
-                var published = await client.PublishAsync(session.SessionId, batch, stop);
-                if (!published.IsSuccess && published.Status != HttpStatusCode.TooManyRequests && (int)published.Status < 500)
-                    throw ConnectionError(published);
+                if (buffer.Take(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cadence) is { } batch)
+                    await publish(batch, stop);
             }
 
-            var result = await capture;
-            reason = result.TargetExited ? EndReason.TargetExited : EndReason.Detached;
-            return result;
-        }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested)
-        {
-            reason = EndReason.Detached;
             return await capture;
         }
         finally
         {
             captureStop.Cancel();
-            try
+            if (!capture.IsCompleted)
             {
-                if (!capture.IsCompleted)
-                    await capture;
-            }
-            catch (OperationCanceledException) when (captureStop.IsCancellationRequested) { }
-            finally
-            {
-                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await client.EndAsync(session.SessionId, new(reason), cleanup.Token); }
-                catch (OperationCanceledException) when (cleanup.IsCancellationRequested) { }
+                try { await capture; }
+                catch (OperationCanceledException) when (captureStop.IsCancellationRequested) { }
             }
         }
     }
