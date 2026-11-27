@@ -40,7 +40,7 @@
 
 - [X] T017 [P] [US2] Add controlled allocation phases and reference deltas in `samples/Workload.Console/AllocationScenario.cs`.
 - [X] T018 [P] [US2] Implement EventPipe allocation ingestion and weighted attribution in `src/CodeOrganism.Connector.DotNet/AllocationCollector.cs`. See [Measurement](data-model.md#measurement), especially `Measurement.quality` and `Measurement.attribution`.
-- [ ] T019 [US2] Wire allocation capability into the publisher and size channel with metric selection and honest units in `src/CodeOrganism.Connector.DotNet/ObservationPublisher.cs` and `src/web/src/graph/metrics.ts`.
+- [X] T019 [US2] Wire allocation capability into the publisher and size channel with metric selection and honest units in `src/CodeOrganism.Connector.DotNet/ObservationPublisher.cs` and `src/web/src/graph/metrics.ts`.
 - [ ] T020 [US2] Validate heavy/light phases, unattributed work and unavailable versus zero readings in `tests/CodeOrganism.Windows.Tests/AllocationTests.cs` and `tests/browser/allocation-map.spec.ts`.
 
 ## Phase 5: US3 - Inspect method frequency and compare signals (P3)

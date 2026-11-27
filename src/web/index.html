@@ -22,8 +22,12 @@
           <p id="control-message" role="status"></p>
         </form>
         <div class="map-header">
-          <div><h2 id="map-title">Runtime map</h2><p>CPU activity · estimated</p></div>
+          <div><h2 id="map-title">Runtime map</h2><p id="metric-caption">CPU activity · milliseconds per second</p></div>
           <div class="map-controls">
+            <div class="metrics" role="group" aria-label="Map metric">
+              <button id="metric-cpu" type="button" aria-pressed="true">CPU</button>
+              <button id="metric-allocation" type="button" aria-pressed="false" disabled>Allocations</button>
+            </div>
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
             <button id="reset-view" type="button">Reset view</button>
@@ -34,11 +38,11 @@
           <canvas id="runtime-map" tabindex="0" aria-label="Runtime map. Use arrow keys to pan and plus or minus to zoom."></canvas>
           <p class="empty" id="map-empty">Attach to a running .NET process to see its activity.</p>
         </div>
-        <p class="legend"><span class="pulse" aria-hidden="true"></span> Pulse: CPU activity <span class="branch" aria-hidden="true"></span> Line: observed stack link</p>
+        <p class="legend"><span class="pulse" aria-hidden="true"></span> <span id="metric-legend">Pulse: CPU activity</span> <span class="branch" aria-hidden="true"></span> Line: observed stack link</p>
       </section>
       <aside class="inspector" aria-label="Map inspection">
         <h2 id="ranking-title">Top modules</h2>
-        <p>Estimated CPU milliseconds per second</p>
+        <p id="rank-metric">CPU activity · milliseconds per second</p>
         <ol id="cpu-ranking"></ol>
         <p id="coverage" class="coverage"></p>
         <details id="details">

@@ -31,6 +31,8 @@ button:disabled { color: #9683a4; opacity: .65; cursor: default; }
 .map-header { justify-content: space-between; align-items: center; }
 .map-header p, .inspector p { margin-top: 6px; font-size: 12px; }
 .map-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.metrics { display: flex; gap: 4px; margin-right: 6px; }
+.metrics button[aria-pressed="true"] { background: #57377a; border-color: #b083ee; }
 .map { position: relative; min-height: 400px; height: min(61vh, 780px); background: radial-gradient(ellipse, #251633, #100b1a 78%); }
 canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 canvas:active { cursor: grabbing; }

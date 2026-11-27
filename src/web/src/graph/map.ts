@@ -1,10 +1,12 @@
 import type { Point, PositionedNode, Projection, Snapshot } from "./layout";
+import { metricDetails, toRate, type MetricId } from "./metrics";
 
 type Heat = { amount: number; since: number };
 export class RuntimeMap {
   private readonly context: CanvasRenderingContext2D;
   private readonly motion = matchMedia("(prefers-reduced-motion: reduce)");
-  private readonly heat = new Map<string, Heat>();
+  private readonly heat = { cpu: new Map<string, Heat>(), allocation: new Map<string, Heat>() };
+  private metric: MetricId = "cpu";
   private graph?: Projection;
   private selected?: string;
   private size = { x: 0, y: 0 };
@@ -59,7 +61,8 @@ export class RuntimeMap {
   update(snapshot: Snapshot) {
     if (this.sessionId !== snapshot.sessionId) {
       this.sessionId = snapshot.sessionId;
-      this.heat.clear();
+      this.heat.cpu.clear();
+      this.heat.allocation.clear();
       this.reset();
     }
     if (snapshot.state !== "live") return;
@@ -67,12 +70,19 @@ export class RuntimeMap {
     if (duration <= 0) return;
     const now = performance.now();
     for (const measure of snapshot.measurements) {
-      if (measure.metric === "cpu" && measure.value && measure.value > 0)
-        this.heat.set(measure.nodeId, { amount: Math.min(1, Math.sqrt(measure.value / duration)), since: now });
+      const metric = measure.metric;
+      if ((metric === "cpu" || metric === "allocation") && measure.value != null) {
+        const amount = Math.min(1, metricDetails[metric].strength(toRate(measure.value, duration)));
+        this.heat[metric].set(measure.nodeId, { amount, since: now });
+      }
     }
   }
 
-  show(graph: Projection, selected?: string) { this.graph = graph; this.selected = selected; }
+  show(graph: Projection, selected: string | undefined, metric: MetricId) {
+    this.graph = graph;
+    this.selected = selected;
+    this.metric = metric;
+  }
   pause(paused: boolean) { this.frozenAt = paused ? performance.now() : undefined; }
   zoomBy(factor: number) { this.zoom = Math.max(.55, Math.min(3.5, this.zoom * factor)); }
   reset() { this.zoom = 1; this.shift = { x: 0, y: 0 }; }
@@ -118,7 +128,7 @@ export class RuntimeMap {
         const source = index.get(edge.sourceId), target = index.get(edge.targetId);
         if (!source || !target) continue;
         const a = this.screen(source.point), b = this.screen(target.point);
-        const heat = Math.max(this.intensity(source, now), this.intensity(target, now));
+        const heat = this.metric === "cpu" ? Math.max(this.intensity(source, now), this.intensity(target, now)) : 0;
         context.beginPath(); context.moveTo(a.x, a.y);
         if (source === target) context.bezierCurveTo(a.x - 26, a.y - 43, a.x + 33, a.y - 36, a.x, a.y);
         else {
@@ -134,9 +144,11 @@ export class RuntimeMap {
 
       for (const node of graph.nodes) {
         const p = this.screen(node.point);
-        const heat = this.intensity(node, now);
+        const strength = this.intensity(node, now);
+        const heat = this.metric === "cpu" ? strength : 0;
         const focused = node.id === this.selected;
-        const radius = node.kind === "module" || node.kind === "library" ? 6 : 3.5;
+        const baseRadius = node.kind === "module" || node.kind === "library" ? 6 : 3.5;
+        const radius = baseRadius + (this.metric === "allocation" ? 14 * strength : 0);
         const pulse = this.motion.matches ? 1 : .71 + .29 * Math.sin(now / (210 - heat * 125));
         context.beginPath();
         context.arc(p.x, p.y, radius, 0, Math.PI * 2);
@@ -167,7 +179,7 @@ export class RuntimeMap {
   }
 
   private nodeHeat(id: string, now: number): number {
-    const entry = this.heat.get(id);
+    const entry = this.heat[this.metric].get(id);
     return entry ? entry.amount * Math.max(0, 1 - (now - entry.since) / 2_000) : 0;
   }
 }
