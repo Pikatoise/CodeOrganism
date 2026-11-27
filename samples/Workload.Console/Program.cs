@@ -26,8 +26,11 @@ if (args is ["--benchmark", _, ..] && args.Length is 2 or 3 &&
 
 if (args.Length != 0)
 {
-    Console.Error.WriteLine("Usage: Workload.Console [--benchmark <positive-block-count> [--pipe]]");
-    return 2;
+    if (args is not ["--allocations"])
+    {
+        Console.Error.WriteLine("Usage: Workload.Console [--allocations | --benchmark <positive-block-count> [--pipe]]");
+        return 2;
+    }
 }
 
 using var stop = new CancellationTokenSource();
@@ -36,6 +39,13 @@ Console.CancelKeyPress += (_, args) =>
     args.Cancel = true;
     stop.Cancel();
 };
+
+if (args is ["--allocations"])
+{
+    Console.WriteLine(JsonSerializer.Serialize(new { pid = Environment.ProcessId, phaseMs = 3_000 }));
+    AllocationScenario.Run(step => Console.WriteLine(JsonSerializer.Serialize(step, JsonSerializerOptions.Web)), stop.Token);
+    return 0;
+}
 
 Console.WriteLine(JsonSerializer.Serialize(new { pid = Environment.ProcessId, phaseMs = 3_000 }));
 await CpuScenario.RunAsync(TimeSpan.FromSeconds(3), phase =>

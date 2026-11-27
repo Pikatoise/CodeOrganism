@@ -123,7 +123,7 @@ internal static class EtwWorker
         {
             using var verified = AttachSession.OpenTarget(new(pid, startedUtc));
             var result = await ObservationPublisher.CollectBatchesAsync(pid, startedUtc, cadence,
-                (batch, active) => WriteAsync(new(Batch: batch), active), stop.Token);
+                (batch, active) => WriteAsync(new(Batch: batch), active), stop.Token, includeAllocations: true);
             if (!stop.IsCancellationRequested)
                 await WriteAsync(new(Result: result), stop.Token);
             return 0;

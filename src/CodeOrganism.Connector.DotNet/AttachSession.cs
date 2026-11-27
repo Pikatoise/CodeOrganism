@@ -89,7 +89,8 @@ public static class AttachSession
             WriteStatus(new("connecting", Pid: target.Id));
             var started = target.StartTime.ToUniversalTime();
             var result = await ObservationPublisher.RunAsync(client, target.Id, started, stop.Token,
-                (cadence, publish, active) => EtwWorker.CollectAsync(target.Id, started, cadence, publish, active));
+                (cadence, publish, active) => EtwWorker.CollectAsync(target.Id, started, cadence, publish, active),
+                includeAllocations: true);
             status = result.TargetExited
                 ? new("exited", "The selected process exited.", target.Id)
                 : new("detached", "Collection stopped. The target was left running.", target.Id);

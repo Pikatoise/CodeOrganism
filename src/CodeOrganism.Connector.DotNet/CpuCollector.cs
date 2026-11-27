@@ -15,10 +15,8 @@ public sealed record CpuCaptureResult(int Samples, int StackWalks, int LostEvent
 public static class CpuCollector
 {
     private const int SampleIntervalMs = 1;
-    private const int MethodLimit = 32_768;
-
     public static CpuCaptureResult Capture(int processId, DateTime expectedStartUtc, Action<CpuSample> publish,
-        CancellationToken stop, Action<CpuStack>? publishStack = null)
+        CancellationToken stop, Action<CpuStack>? publishStack = null, ManagedCodeIndex? code = null)
     {
         if (!OperatingSystem.IsWindows() || !Environment.Is64BitProcess)
             throw new PlatformNotSupportedException("CPU sampling requires a 64-bit Windows process.");
@@ -49,19 +47,16 @@ public static class CpuCollector
             if (target.HasExited)
                 return new(0, 0, 0, true, false);
 
-            var methods = new SortedList<ulong, CodeRange>();
-            var modules = new Dictionary<long, (string Name, string? Library)>();
+            var index = code ?? new ManagedCodeIndex();
             var samples = 0;
             var stackWalks = 0;
-            var truncated = false;
             var runtime = source.Clr;
             runtime.LoaderModuleLoad += IndexModule;
             runtime.MethodLoadVerbose += IndexMethod;
             runtime.MethodUnloadVerbose += data =>
             {
-                var address = (ulong)data.MethodStartAddress;
-                if (data.ProcessID == processId && methods.TryGetValue(address, out var range) && range.Method.MethodId == data.MethodID)
-                    methods.Remove(address);
+                if (data.ProcessID == processId)
+                    index.RemoveMethod((ulong)data.MethodStartAddress, data.MethodID);
             };
             var rundown = new ClrRundownTraceEventParser(source);
             rundown.LoaderModuleDCStart += IndexModule;
@@ -73,7 +68,7 @@ public static class CpuCollector
                     return;
 
                 samples++;
-                var method = Resolve((ulong)sample.InstructionPointer);
+                var method = index.Resolve((ulong)sample.InstructionPointer);
                 var timestamp = new DateTimeOffset(sample.TimeStamp).ToUnixTimeMilliseconds();
                 publish(new(timestamp, method, Math.Max(1, sample.Count) * (double)SampleIntervalMs));
             };
@@ -88,7 +83,7 @@ public static class CpuCollector
 
                 var frames = new CpuMethod?[stack.FrameCount];
                 for (var i = 0; i < frames.Length; i++)
-                    frames[i] = Resolve((ulong)stack.InstructionPointer(i));
+                    frames[i] = index.Resolve((ulong)stack.InstructionPointer(i));
 
                 // Only the kernel profile event requests stack walks in this session.
                 var timestamp = new DateTimeOffset(stack.TimeStamp).ToUnixTimeMilliseconds();
@@ -105,29 +100,12 @@ public static class CpuCollector
             if (!halt.IsCancellationRequested)
                 source.Process();
 
-            return new(samples, stackWalks, Math.Max(source.EventsLost, trace.EventsLost), target.HasExited, truncated);
-
-            CpuMethod? Resolve(ulong address)
-            {
-                var method = FindMethod(methods, address);
-                if (method is null || !modules.TryGetValue(method.ModuleId, out var module) || module.Name == method.ModuleName)
-                    return method;
-
-                var position = FindPosition(methods, address);
-                var updated = method with { ModuleName = module.Name, Library = module.Library };
-                methods[methods.Keys[position]] = methods.Values[position] with { Method = updated };
-                return updated;
-            }
+            return new(samples, stackWalks, Math.Max(source.EventsLost, trace.EventsLost), target.HasExited, index.Truncated);
 
             void IndexModule(ModuleLoadUnloadTraceData data)
             {
-                if (data.ProcessID != processId || modules.Count >= 2_000 || string.IsNullOrEmpty(data.ModuleILPath))
-                    return;
-
-                var path = data.ModuleILPath.Replace('\\', '/');
-                var library = path.Contains("/dotnet/shared/", StringComparison.OrdinalIgnoreCase) ? "framework"
-                    : path.Contains("/.nuget/packages/", StringComparison.OrdinalIgnoreCase) ? "third-party" : null;
-                modules[data.ModuleID] = (Path.GetFileNameWithoutExtension(path), library);
+                if (data.ProcessID == processId)
+                    index.AddModule(data.ModuleID, data.ModuleILPath);
             }
 
             void IndexMethod(MethodLoadUnloadVerboseTraceData data)
@@ -135,17 +113,8 @@ public static class CpuCollector
                 if (halt.IsCancellationRequested || data.ProcessID != processId || data.MethodSize <= 0)
                     return;
 
-                var address = (ulong)data.MethodStartAddress;
-                if (methods.Count >= MethodLimit && !methods.ContainsKey(address))
-                {
-                    truncated = true;
-                    return;
-                }
-
-                var module = modules.GetValueOrDefault(data.ModuleID);
-                var method = new CpuMethod(data.ModuleID, data.MethodID, data.MethodName, data.MethodNamespace,
-                    data.MethodSignature, module.Name, module.Library);
-                methods[address] = new(address + (ulong)data.MethodSize, method);
+                index.AddMethod((ulong)data.MethodStartAddress, data.MethodSize,
+                    new(data.ModuleID, data.MethodID, data.MethodName, data.MethodNamespace, data.MethodSignature));
             }
         }
         finally
@@ -156,27 +125,4 @@ public static class CpuCollector
         void TargetExited(object? sender, EventArgs args) => halt.Cancel();
     }
 
-    private static CpuMethod? FindMethod(SortedList<ulong, CodeRange> methods, ulong address)
-    {
-        var position = FindPosition(methods, address);
-        return position >= 0 && address < methods.Values[position].End ? methods.Values[position].Method : null;
-    }
-
-    private static int FindPosition(SortedList<ulong, CodeRange> methods, ulong address)
-    {
-        var left = 0;
-        var right = methods.Count;
-        while (left < right)
-        {
-            var middle = left + (right - left) / 2;
-            if (methods.Keys[middle] <= address)
-                left = middle + 1;
-            else
-                right = middle;
-        }
-
-        return left - 1;
-    }
-
-    private sealed record CodeRange(ulong End, CpuMethod Method);
 }

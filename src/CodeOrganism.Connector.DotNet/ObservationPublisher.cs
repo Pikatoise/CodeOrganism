@@ -1,25 +1,31 @@
 using System.Diagnostics;
 using System.Net;
 using CodeOrganism.Protocol;
+using Microsoft.Diagnostics.NETCore.Client;
 
 namespace CodeOrganism.Connector.DotNet;
 
 public static class ObservationPublisher
 {
     public static async Task<CpuCaptureResult> RunAsync(ConnectorClient client, int pid, DateTime startUtc, CancellationToken stop,
-        Func<int, Func<ConnectorBatch, CancellationToken, Task>, CancellationToken, Task<CpuCaptureResult>>? collect = null)
+        Func<int, Func<ConnectorBatch, CancellationToken, Task>, CancellationToken, Task<CpuCaptureResult>>? collect = null,
+        bool includeAllocations = false)
     {
         using var target = Process.GetProcessById(pid);
+        var cpu = new MetricCapability(Metric.Cpu, "ms", "windows-etw-on-cpu-sampling", Quality.Estimated);
+        MetricCapability[] capabilities = includeAllocations
+            ? [cpu, new(Metric.Allocation, "byte", AllocationCollector.MeasurementMethod, Quality.Estimated)]
+            : [cpu];
         var registration = new Registration(Guid.NewGuid().ToString("N"), ConnectorMessages.Version,
             new($"dotnet-{pid}-{startUtc.Ticks}", target.ProcessName, $"PID {pid}"),
-            [new(Metric.Cpu, "ms", "windows-etw-on-cpu-sampling", Quality.Estimated)]);
+            capabilities);
         RegisteredSession? session = collect is null ? await RegisterAsync(stop) : null;
         var reason = EndReason.ProducerError;
         var cadence = Math.Max(200, session?.Limits.MinIntervalMs ?? 0);
         try
         {
             var result = collect is null
-                ? await CollectBatchesAsync(pid, startUtc, cadence, Publish, stop)
+                ? await CollectBatchesAsync(pid, startUtc, cadence, Publish, stop, includeAllocations)
                 : await collect(cadence, Publish, stop);
             reason = result.TargetExited ? EndReason.TargetExited : EndReason.Detached;
             return result;
@@ -61,13 +67,15 @@ public static class ObservationPublisher
     }
 
     public static async Task<CpuCaptureResult> CollectBatchesAsync(int pid, DateTime startUtc, int cadence,
-        Func<ConnectorBatch, CancellationToken, Task> publish, CancellationToken stop)
+        Func<ConnectorBatch, CancellationToken, Task> publish, CancellationToken stop, bool includeAllocations = false)
     {
-        var buffer = new CpuBatchBuffer(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var index = new ManagedCodeIndex();
+        var buffer = new CpuBatchBuffer(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), index);
         using var captureStop = CancellationTokenSource.CreateLinkedTokenSource(stop);
         var capture = Task.Factory.StartNew(
-            () => CpuCollector.Capture(pid, startUtc, buffer.Add, captureStop.Token, buffer.Add),
+            () => CpuCollector.Capture(pid, startUtc, buffer.Add, captureStop.Token, buffer.Add, index),
             CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var allocations = includeAllocations ? CollectAllocationsAsync() : Task.CompletedTask;
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(cadence));
@@ -87,6 +95,17 @@ public static class ObservationPublisher
                 try { await capture; }
                 catch (OperationCanceledException) when (captureStop.IsCancellationRequested) { }
             }
+            await allocations;
+        }
+
+        async Task CollectAllocationsAsync()
+        {
+            try { await AllocationCollector.CaptureAsync(pid, buffer.Add, buffer.MarkAllocationLoss, captureStop.Token); }
+            catch (OperationCanceledException) when (captureStop.IsCancellationRequested) { }
+            catch (Exception error) when (error is DiagnosticsClientException or IOException or ObjectDisposedException)
+            {
+                if (!captureStop.IsCancellationRequested) buffer.MarkAllocationLoss();
+            }
         }
     }
 
@@ -100,19 +119,37 @@ public static class ObservationPublisher
         new($"The local visualizer rejected the connector request ({(int)reply.Status}, {reply.Error?.Code ?? "unknown"}).");
 }
 
-public sealed class CpuBatchBuffer(long epochMs)
+public sealed class CpuBatchBuffer(long epochMs, ManagedCodeIndex? code = null)
 {
     private const int MaxBufferedEvents = 12_000;
     private const int MaxNodesPerBatch = 300;
     private const int MaxEdgesPerBatch = 500;
-    private const string UnknownNode = "unmapped-cpu";
     private readonly object gate = new();
     private readonly List<CpuSample> samples = [];
     private readonly List<CpuStack> stacks = [];
+    private readonly List<AllocationSample> allocations = [];
     private long newest;
     private long end;
     private long sequence;
     private long dropped;
+    private bool allocationLoss;
+
+    public void Add(AllocationSample sample)
+    {
+        lock (gate)
+        {
+            if (sample.TimestampMs - epochMs < end || allocations.Count == MaxBufferedEvents)
+                allocationLoss = true;
+            else
+                allocations.Add(sample);
+        }
+    }
+
+    public void MarkAllocationLoss()
+    {
+        lock (gate)
+            allocationLoss = true;
+    }
 
     public void Add(CpuSample sample)
     {
@@ -143,6 +180,8 @@ public sealed class CpuBatchBuffer(long epochMs)
     {
         CpuSample[] ready;
         CpuStack[] walks;
+        AllocationSample[] allocated;
+        bool allocationsIncomplete;
         long from, through, next, lost;
         lock (gate)
         {
@@ -156,26 +195,38 @@ public sealed class CpuBatchBuffer(long epochMs)
             next = ++sequence;
             lost = dropped;
             dropped = 0;
+            allocationsIncomplete = allocationLoss;
+            allocationLoss = false;
             ready = [.. samples.Where(x => x.TimestampMs - epochMs < through)];
             walks = [.. stacks.Where(x => x.TimestampMs - epochMs < through)];
+            allocated = [.. allocations.Where(x => x.TimestampMs - epochMs < through)];
             samples.RemoveAll(x => x.TimestampMs - epochMs < through);
             stacks.RemoveAll(x => x.TimestampMs - epochMs < through);
+            allocations.RemoveAll(x => x.TimestampMs - epochMs < through);
         }
 
         var nodes = new Dictionary<string, GraphNode>(StringComparer.Ordinal);
         var edges = new HashSet<GraphRelationship>();
-        var totals = new Dictionary<string, double>(StringComparer.Ordinal);
+        var totals = new Dictionary<(string Node, Metric Metric), double>();
+        var unattributed = new HashSet<Metric>();
         var truncated = false;
         foreach (var sample in ready)
+            AddValue(sample.Method, Metric.Cpu, sample.CpuMilliseconds);
+        foreach (var sample in allocated)
+            AddValue(sample.Address is { } address ? code?.Resolve(address) : null, Metric.Allocation, sample.Bytes);
+
+        void AddValue(CpuMethod? method, Metric metric, double value)
         {
-            var id = sample.Method is { } method ? Include(method) : null;
+            var id = method is not null ? Include(method) : null;
             if (id is null)
             {
-                id = UnknownNode;
-                nodes.TryAdd(id, new(id, NodeKind.Unresolved, "Unresolved CPU"));
+                id = metric == Metric.Cpu ? "unmapped-cpu" : "unmapped-allocation";
+                nodes.TryAdd(id, new(id, NodeKind.Unresolved, metric == Metric.Cpu ? "Unresolved CPU" : "Unresolved allocations"));
+                unattributed.Add(metric);
             }
 
-            totals[id] = totals.GetValueOrDefault(id) + sample.CpuMilliseconds;
+            var key = (id, metric);
+            totals[key] = totals.GetValueOrDefault(key) + value;
         }
 
         foreach (var walk in walks)
@@ -196,12 +247,15 @@ public sealed class CpuBatchBuffer(long epochMs)
         var loss = new List<MeasurementLoss>();
         if (lost > 0)
             loss.Add(new(LossKind.SourceEvents, Metric.Cpu, lost));
+        if (allocationsIncomplete)
+            loss.Add(new(LossKind.SourceEvents, Metric.Allocation));
         if (truncated)
-            loss.Add(new(LossKind.TopologyLimit, Metric.Cpu));
-        if (totals.ContainsKey(UnknownNode))
-            loss.Add(new(LossKind.UnresolvedAttribution, Metric.Cpu));
+            loss.Add(new(LossKind.TopologyLimit));
+        foreach (var metric in unattributed)
+            loss.Add(new(LossKind.UnresolvedAttribution, metric));
 
-        var observations = totals.Select(x => new Observation(x.Key, Metric.Cpu, x.Value, Quality.Estimated, lost == 0)).ToArray();
+        var observations = totals.Select(x => new Observation(x.Key.Node, x.Key.Metric, x.Value, Quality.Estimated,
+            x.Key.Metric == Metric.Allocation ? !allocationsIncomplete : lost == 0)).ToArray();
         return new(next, from, through, [.. nodes.Values], [.. edges], observations, [.. loss]);
 
         string? Include(CpuMethod method)
