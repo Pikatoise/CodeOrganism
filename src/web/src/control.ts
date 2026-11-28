@@ -1,7 +1,10 @@
-type ControlStatus = { state: string; reason?: string | null; pid?: number };
+import { t } from "./language";
+
+export type ControlStatus = { state: string; reason?: string | null; pid?: number };
 type Target = { pid: number; name: string; startedUtc: string };
 
-export function connectControls(onStatus: (status: ControlStatus) => void) {
+export function connectControls(onStatus: (status: ControlStatus) => void,
+  onAttach: (pid: number) => void, onAttachFailure: () => void) {
   const picker = document.querySelector<HTMLSelectElement>("#process")!;
   const pid = document.querySelector<HTMLInputElement>("#pid")!;
   const form = document.querySelector<HTMLFormElement>("#attach-form")!;
@@ -16,21 +19,38 @@ export function connectControls(onStatus: (status: ControlStatus) => void) {
   let pending = false;
   let listing = false;
   let previousStatus = "";
+  let messageText = "";
+  let processesLoaded = false;
+  let revision = 0;
+
+  function showMessage(text: string) {
+    messageText = text;
+    message.textContent = t(text);
+  }
+
+  function showTargets() {
+    picker.options[0].text = t(!processesLoaded ? "Loading processes" :
+      targets.length ? "Choose .NET 10 process" : "No supported processes found");
+  }
 
   async function readControl() {
+    const requestedAt = revision;
     try {
       const result = await fetch("/api/view/v1/control", { cache: "no-store" });
       if (!result.ok) throw new Error("Local process controls are unavailable.");
       const info = await result.json() as { csrf: string; status: ControlStatus };
+      if (requestedAt !== revision) return;
       csrf = info.csrf;
       active = ["connecting", "connected", "detaching"].includes(info.status.state);
       onStatus(info.status);
       const signature = `${info.status.state}:${info.status.reason ?? ""}`;
-      if (signature !== previousStatus) message.textContent = info.status.reason ?? "";
+      if (signature !== previousStatus) showMessage(info.status.reason ?? "");
       previousStatus = signature;
       updateButtons();
     } catch {
-      message.textContent = "Local process controls are unavailable.";
+      if (requestedAt !== revision) return;
+      showMessage("Local process controls are unavailable.");
+      onAttachFailure();
     }
   }
 
@@ -43,21 +63,25 @@ export function connectControls(onStatus: (status: ControlStatus) => void) {
       const result = await fetch("/api/view/v1/processes", { cache: "no-store" });
       if (!result.ok) throw new Error("The process list is unavailable. You can still try a PID.");
       targets = await result.json() as Target[];
+      processesLoaded = true;
       const previous = picker.value;
-      picker.replaceChildren(new Option(targets.length ? "Choose .NET 10 process" : "No supported processes found", ""),
+      picker.replaceChildren(new Option("", ""),
         ...targets.map(target => new Option(`${target.name} (PID ${target.pid})`, String(target.pid))));
+      showTargets();
       if (targets.some(target => String(target.pid) === previous)) picker.value = previous;
     } catch (error) {
-      message.textContent = error instanceof Error ? error.message : "Could not list processes.";
+      showMessage(error instanceof Error ? error.message : "Could not list processes.");
     } finally {
       listing = false;
       updateButtons();
     }
   }
 
-  async function mutate(action: "attach" | "detach", body: object) {
+  async function mutate(action: "attach" | "detach", body: { pid?: number; startedUtc?: string }) {
     if (pending) return;
     pending = true;
+    revision++;
+    if (action === "attach" && body.pid !== undefined) onAttach(body.pid);
     updateButtons();
     try {
       const result = await fetch(`/api/view/v1/${action}`, {
@@ -70,7 +94,8 @@ export function connectControls(onStatus: (status: ControlStatus) => void) {
       }
       await readControl();
     } catch (error) {
-      message.textContent = error instanceof Error ? error.message : "Control request failed.";
+      showMessage(error instanceof Error ? error.message : "Control request failed.");
+      onAttachFailure();
     } finally {
       pending = false;
       updateButtons();
@@ -81,12 +106,15 @@ export function connectControls(onStatus: (status: ControlStatus) => void) {
     attach.disabled = active || external || pending || !csrf || !(Number(picker.value) > 0 || Number(pid.value) > 0);
     detach.disabled = pending || !csrf || !(active || external);
     refresh.disabled = pending || listing;
+    refresh.setAttribute("aria-busy", String(listing));
   }
 
   form.addEventListener("submit", event => {
     event.preventDefault();
+    if (attach.disabled) return;
     const target = targets.find(item => item.pid === Number(picker.value));
-    if (pid.value) void mutate("attach", { pid: Number(pid.value) });
+    const requested = Number(pid.value);
+    if (Number.isSafeInteger(requested) && requested > 0) void mutate("attach", { pid: requested });
     else if (target) void mutate("attach", { pid: target.pid, startedUtc: target.startedUtc });
   });
   detach.addEventListener("click", () => { void mutate("detach", {}); });
@@ -97,6 +125,10 @@ export function connectControls(onStatus: (status: ControlStatus) => void) {
   window.setInterval(() => { if (!pending) void readControl(); }, 1_000);
 
   return {
+    localize() {
+      showTargets();
+      showMessage(messageText);
+    },
     externalLive(value: boolean) {
       external = value;
       updateButtons();

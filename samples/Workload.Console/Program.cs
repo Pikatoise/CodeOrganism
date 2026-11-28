@@ -1,10 +1,9 @@
 using System.Text.Json;
 using CodeOrganism.Workload;
 
-if (args is ["--calls"])
+if (args is ["--calls"] or ["--calls", "--repeat"])
 {
-    await CallScenario.RunAsync();
-    return 0;
+    return await CallScenario.RunAsync(args.Length == 2);
 }
 
 if (args is ["--benchmark", _, ..] && args.Length is 2 or 3 &&
@@ -34,7 +33,7 @@ if (args.Length != 0)
 {
     if (args is not ["--allocations"])
     {
-        Console.Error.WriteLine("Usage: Workload.Console [--allocations | --calls | --benchmark <positive-block-count> [--pipe]]");
+        Console.Error.WriteLine("Usage: Workload.Console [--allocations | --calls [--repeat] | --benchmark <positive-block-count> [--pipe]]");
         return 2;
     }
 }

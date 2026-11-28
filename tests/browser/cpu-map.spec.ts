@@ -15,9 +15,22 @@ for (const width of [1440, 640]) {
   test(`groups, keyboard inspection, paused data and recovery at ${width}px`, async ({ page, host, request }) => {
     await page.setViewportSize({ width, height: 850 });
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.route("**/api/view/v1/processes", async route => {
+      await delay(250);
+      await route.fulfill({ json: [{ pid: 42, name: "Orders demo", startedUtc: "2026-01-01T00:00:00Z" }] });
+    });
     await page.goto(host.url);
     await expect(page.locator("#source-status")).toHaveText("No source connected");
-    await expect(page.locator("#details")).toHaveJSProperty("open", width === 1440);
+    await expect(page.locator("#details")).toHaveJSProperty("open", false);
+    const picker = page.getByLabel("Process", { exact: true });
+    const refresh = page.getByRole("button", { name: "Refresh process list" });
+    await expect(refresh).toHaveAttribute("title", "Refresh process list");
+    await picker.selectOption("42");
+    expect(await refresh.evaluate(button => button.nextElementSibling?.id)).toBe("process");
+    await refresh.press("Enter");
+    await expect(refresh).toHaveAttribute("aria-busy", "true");
+    await expect(refresh).toBeEnabled();
+    await expect(picker).toHaveValue("42");
 
     const headers = { Authorization: `Bearer ${host.credential}` };
     const registration = await request.post(host.url + paths.api, { headers, data: {
@@ -47,10 +60,14 @@ for (const width of [1440, 640]) {
     await page.locator("#groups").getByRole("button", { name: /Libraries/ }).click();
     await expect(page.locator("#groups").getByRole("button", { name: /System.Runtime/ })).toBeVisible();
     await page.locator("#groups").getByRole("button", { name: /Orders/ }).press("Enter");
+    await page.getByLabel("Ranking view").selectOption("methods");
     await expect(page.getByRole("heading", { name: "Top methods" })).toBeVisible();
     await page.getByRole("button", { name: /PriceOrder.*800 ms\/s/ }).press("Enter");
+    await expect(page.locator("#details")).toHaveJSProperty("open", false);
+    await page.locator("#details summary").press("Enter");
     await expect(page.locator("#selection-name")).toHaveText("Orders / PriceOrder");
-    await expect(page.locator("#selection-values")).toContainText("Windows ETW CPU sampling");
+    await expect(page.locator("#selection-values")).toContainText("800 ms/s · estimated");
+    await expect(page.locator("#selection-values dt")).toHaveText(["CPU", "Interval"]);
 
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     await publish(2, 40, 900, true);
@@ -61,12 +78,25 @@ for (const width of [1440, 640]) {
     await page.getByRole("button", { name: "Reset view" }).click();
     await page.getByRole("button", { name: "Resume" }).click();
     await expect(page.locator("#cpu-ranking").getByRole("button").first()).toContainText("BuildOrder");
-    await expect(page.locator("#selection-values")).toContainText("Partial sample window");
+    await expect(page.locator("#selection-values")).toContainText("(partial)");
     await expect(page.locator("#coverage")).toContainText("Measurement loss in this interval");
     await expect(page.locator("#source-status")).toContainText("Waiting for updates", { timeout: 5_000 });
     await publish(3, 850, 45);
     await expect(page.locator("#source-status")).toContainText("Live");
-    await expect(page.locator("#selection-values")).toContainText("Complete sample window");
+    await expect(page.locator("#selection-values")).toContainText("850 ms/s · estimated");
+    await expect(page.locator("#selection-values")).not.toContainText("(partial)");
+    await expect(page.locator('#cpu-ranking button[data-node="other"]')).toContainText("900 ms/s");
+    const module = page.locator('#groups button[data-node="app"]');
+    const method = page.locator('#groups > li > ul button[data-node="work"]');
+    await expect(method).toBeVisible();
+    await method.press("Enter");
+    await expect(method).toHaveAttribute("aria-current", "true");
+    await module.press("Enter");
+    await expect(method).toBeHidden();
+    await expect(module).toBeFocused();
+    await page.getByRole("button", { name: "Collapse all" }).click();
+    await expect(page.getByRole("heading", { name: "Top methods" })).toBeVisible();
+    await expect(page.locator('#cpu-ranking button[data-node="other"]')).toContainText("900 ms/s");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator("canvas").evaluate(canvas => {
       const ctx = (canvas as HTMLCanvasElement).getContext("2d")!;

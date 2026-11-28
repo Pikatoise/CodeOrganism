@@ -19,6 +19,8 @@ Start the local host with `dotnet run --project src/CodeOrganism.Host -c Release
 
 Run the [CPU workflow checks](specs/001-live-runtime-map/quickstart.md#cpu-browser-workflow) after building.
 
+Open the gear in the header to choose English or Russian, a white, dark or purple theme, and a graphics preset. The presets cap the canvas pixel ratio at 1, 2 or 3 and allow up to 32, 96 or 160 glowing connections. The browser keeps the preferences across local host restarts.
+
 ### Authorize a third-party connector
 
 Start the host with an explicit external grant from a private terminal.

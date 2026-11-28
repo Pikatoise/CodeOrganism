@@ -50,11 +50,12 @@ test("allocation size and units distinguish zero from missing samples", async ({
   await publish(1, 0);
   await page.getByRole("button", { name: "Allocations", exact: true }).click();
   await page.locator("#groups").getByRole("button", { name: /Orders/ }).click();
+  await page.getByLabel("Ranking view").selectOption("methods");
   await page.getByRole("button", { name: /PriceOrder.*0 B\/s/ }).click();
   const values = page.locator("#selection-values");
   await expect(values).toContainText("0 B/s");
-  await expect(values).toContainText("Estimated");
-  await expect(values).toContainText(".NET EventPipe allocation ticks");
+  await expect(values).toContainText("estimated");
+  await expect(values.locator("dt")).toHaveText(["Allocation rate", "Interval"]);
   await expect(page.locator("#metric-legend")).toHaveText("Size: allocation rate");
   const maxRadius = () => page.evaluate(() => (window as Window & { drawnRadius: number }).drawnRadius);
   await expect.poll(maxRadius).toBeGreaterThan(0);
@@ -66,7 +67,8 @@ test("allocation size and units distinguish zero from missing samples", async ({
   await expect.poll(maxRadius).toBeGreaterThan(atZero + 3);
 
   await publish(3, null, 4 * 1024 ** 2, true);
-  await expect(page.locator("#cpu-ranking button").first()).toContainText("CreateInvoice");
+  await expect(page.locator("#cpu-ranking button").first()).toContainText("PriceOrder");
+  await expect(page.locator("#cpu-ranking").getByRole("button", { name: /CreateInvoice/ })).toContainText("4 MiB/s");
   await expect(values).toContainText("Unavailable");
   await expect(values).not.toContainText("0 B/s");
   await expect(page.locator("#coverage")).toContainText("Some allocation samples could not be attributed.");
@@ -85,9 +87,10 @@ test("allocation ranking follows the real EventPipe workload", async ({ page, ho
   await page.getByRole("button", { name: "Attach", exact: true }).click();
   await page.getByRole("button", { name: "Allocations", exact: true }).click({ timeout: 15_000 });
   await page.locator("#groups").getByRole("button", { name: /Workload.Console/ }).click({ timeout: 12_000 });
-  const leading = page.locator("#cpu-ranking button").first();
-  await expect(leading).toContainText("AllocateOrders", { timeout: 12_000 });
-  await expect(leading).toContainText("AllocateInvoices", { timeout: 12_000 });
+  await page.getByLabel("Ranking view").selectOption("methods");
+  const ranking = page.locator("#cpu-ranking");
+  await expect(ranking.getByRole("button", { name: /AllocateOrders/ })).toContainText(/MiB\/s/, { timeout: 12_000 });
+  await expect(ranking.getByRole("button", { name: /AllocateInvoices/ })).toContainText(/MiB\/s/, { timeout: 12_000 });
   await expect(page.locator("#rank-metric")).toContainText("estimated");
   await page.getByRole("button", { name: "Detach", exact: true }).click();
   await expect(page.locator("#source-status")).toHaveText("Detached", { timeout: 10_000 });

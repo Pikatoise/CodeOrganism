@@ -20,6 +20,7 @@ test("stand-alone publisher exposes calls and reports contract conflicts", async
   await expect(page.getByRole("button", { name: "Combined", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Calls", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.locator("#groups").getByRole("button", { name: /Example script/ }).click();
+  await page.getByLabel("Ranking view").selectOption("methods");
   await page.locator("#cpu-ranking").getByRole("button", { name: /Invoke-ExampleWork.*calls\/s/ }).click();
   await expect(page.locator("#selection-values")).toContainText("Exact");
   await expect(page.locator("#selection-values")).toContainText("Complete checkpoint window");

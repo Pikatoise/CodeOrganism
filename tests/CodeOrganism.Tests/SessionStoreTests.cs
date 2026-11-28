@@ -68,6 +68,35 @@ public class SessionStoreTests
     }
 
     [Fact]
+    public void KeepsBestCompleteRateAcrossWindowsAndMissedReads()
+    {
+        var clock = new TestClock();
+        var store = new SessionStore(clock, Limits);
+        var session = store.Register(Source).Value!.SessionId;
+        Publish(1, 0, 100, 1_000, false, [Module, Method]);
+        Publish(2, 100, 200, 10, true, []);
+        Publish(3, 200, 2_200, 40, true, []);
+        Publish(4, 2_200, 2_300, 12, true, []);
+        Publish(5, 2_300, 2_400, null, false, []);
+        var peak = Assert.Single(store.Read().Snapshot!.MethodPeaks);
+        Assert.Equal(12, peak.Reading.Value);
+        Assert.Equal(2_200, peak.StartMs);
+        Assert.Equal(2_300, peak.EndMs);
+        Assert.True(peak.Reading.Complete);
+        store.End(session, new(EndReason.Detached));
+        store.Register(Source with { RequestId = "next" });
+        Assert.Empty(store.Read().Snapshot!.MethodPeaks);
+
+        void Publish(long sequence, long start, long end, double? value, bool complete, GraphNode[] nodes)
+        {
+            var observation = new Observation("method", Metric.Calls, value,
+                value is null ? Quality.Unavailable : Quality.Exact, complete);
+            Assert.Equal(202, store.Publish(session, new(sequence, start, end, nodes, [], [observation], [])).Status);
+            clock.Advance(100);
+        }
+    }
+
+    [Fact]
     public void RollsUpCoveredMethodsAndReportsTruncation()
     {
         var store = new SessionStore(new TestClock(), Limits);

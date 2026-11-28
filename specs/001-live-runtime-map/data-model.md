@@ -33,4 +33,5 @@ The [connector contract](contracts/connector-v1.md) specifies transport and the 
 ## View snapshot
 
 - `Snapshot.version`: Monotonic per session. Carries admitted topology, measurements, source state and loss indicators. SSE can skip intermediate versions. Resume and reconnect request the latest complete snapshot.
+- `Snapshot.methodPeaks`: The host keeps one winning reading and its interval per admitted method and metric in the session. Compare rates across window lengths. Keep the first reading on ties. For calls, prefer complete rates and retain the largest covered count until a complete reading arrives. Missing values leave the stored peak in place. The latest snapshot carries the summary even when a browser skips updates. A new session starts with an empty summary.
 - `Snapshot.renderState`: Browser-only position, focus, filter, selection, animation phase and paused snapshot. Decay changes visual emphasis only. Exact values in the inspector stay tied to their measured windows.

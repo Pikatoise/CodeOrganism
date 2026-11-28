@@ -3,10 +3,12 @@ using CodeOrganism.Protocol;
 
 namespace CodeOrganism.Host;
 
+public sealed record MethodPeak(Observation Reading, long StartMs, long EndMs);
+
 public sealed record MapSnapshot(
     string SessionId, long Version, SessionStatus State, ConnectorSource Source, MetricCapability[] Capabilities,
     long? StartMs, long? EndMs, GraphNode[] Nodes, GraphRelationship[] Relationships, Observation[] Measurements,
-    MeasurementLoss[] Loss, long Gaps, DateTimeOffset LastUpdate, string? EndReason);
+    MeasurementLoss[] Loss, long Gaps, DateTimeOffset LastUpdate, string? EndReason, MethodPeak[] MethodPeaks);
 
 public static class SnapshotStream
 {

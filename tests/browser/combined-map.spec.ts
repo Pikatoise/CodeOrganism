@@ -49,6 +49,7 @@ for (const width of [1440, 640]) {
     await publish(1, true);
     await page.getByRole("button", { name: "Combined", exact: true }).click();
     await page.locator("#groups").getByRole("button", { name: /Workloads/ }).click();
+    await page.getByLabel("Ranking view").selectOption("methods");
     const rank = page.locator("#cpu-ranking button").first();
     await expect(rank).toContainText("Compute");
     await page.getByLabel("Rank by").selectOption("allocation");
@@ -70,6 +71,7 @@ for (const width of [1440, 640]) {
     await expect(readings).toContainText("17 covered calls");
     await expect(readings).toContainText("Partial checkpoint window");
     await expect(readings).toContainText("Covered entries only");
+    await expect(rank).toContainText("8,000 calls/s");
     await expect(readings).not.toContainText("Exact");
     await page.getByRole("button", { name: "Calls", exact: true }).click();
     await expect(page.getByLabel("Rank by")).toBeHidden();
@@ -93,6 +95,7 @@ test("prepared target exposes calls through the first-party connector", async ({
   await page.getByRole("button", { name: "Combined", exact: true }).click();
   await expect(page.getByLabel("Rank by")).toHaveValue("calls");
   await page.locator("#groups").getByRole("button", { name: /Workload.Console/ }).first().click();
+  await page.getByLabel("Ranking view").selectOption("methods");
   const rank = page.locator("#cpu-ranking button").first();
   await expect(rank).toContainText("0 calls/s");
   const feed = setInterval(() => workload.stdin!.write("50000\n"), 125);
@@ -104,4 +107,20 @@ test("prepared target exposes calls through the first-party connector", async ({
   await page.getByRole("button", { name: "Detach", exact: true }).click();
   await expect(page.locator("#source-status")).toHaveText("Detached", { timeout: 10_000 });
   expect(workload.exitCode).toBeNull();
+});
+
+test("repeating call demo supplies entries without terminal input", async ({ page, host }) => {
+  const prepared = process.env.CODEORGANISM_TEST_CALL_TARGET;
+  test.skip(process.platform !== "win32" || process.env.CODEORGANISM_TEST_ETW !== "1" || !prepared,
+    "Set CODEORGANISM_TEST_ETW=1 and CODEORGANISM_TEST_CALL_TARGET from an elevated Windows test shell.");
+  const workload = host.start(prepared!, {}, ["--calls", "--repeat"]);
+  const pid = await lineValue(workload, line => /"pid":(\d+)/.exec(line)?.[1]);
+  await page.goto(host.url);
+  await page.getByLabel("Process", { exact: true }).selectOption(pid);
+  await page.getByRole("button", { name: "Attach", exact: true }).click();
+  await page.getByRole("button", { name: "Calls", exact: true }).click({ timeout: 15_000 });
+  await page.locator("#groups").getByRole("button", { name: /Workload.Console/ }).first().click();
+  await page.getByLabel("Ranking view").selectOption("methods");
+  await expect(page.locator("#cpu-ranking").getByRole("button", { name: /RecursiveEntry/ }))
+    .toContainText(/[1-9][\d,]*(?:\.\d+)? calls\/s/, { timeout: 12_000 });
 });

@@ -15,6 +15,7 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
     private readonly object gate = new();
     private readonly Dictionary<string, GraphNode> nodes = new(StringComparer.Ordinal);
     private readonly HashSet<GraphRelationship> relationships = [];
+    private readonly Dictionary<(string NodeId, Metric Metric), MethodPeak> methodPeaks = [];
     private TaskCompletionSource changed = NewSignal();
     private MapSnapshot? snapshot;
     private RegisteredSession? session;
@@ -40,6 +41,7 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
 
             nodes.Clear();
             relationships.Clear();
+            methodPeaks.Clear();
             sourceId = registration.Source.Id;
             requestId = registration.RequestId;
             registrationHash = hash;
@@ -47,7 +49,7 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
             lastSequence = 0;
             session = new(Guid.NewGuid().ToString("N"), limits);
             SetSnapshot(new(session.SessionId, 1, SessionStatus.Connecting, registration.Source,
-                registration.Capabilities, null, null, [], [], [], [], 0, clock.GetUtcNow(), null));
+                registration.Capabilities, null, null, [], [], [], [], 0, clock.GetUtcNow(), null, []));
             return new(201, Value: session);
         }
     }
@@ -118,6 +120,7 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
             }
 
             var measured = SnapshotStream.WithRollups(nodes.Values, observations, loss);
+            var peaksChanged = RememberMethodPeaks(observations, batch.StartMs, batch.EndMs);
             lastSequence = batch.Sequence;
             lastBatchHash = hash;
             SetSnapshot(current with
@@ -129,6 +132,7 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
                 Nodes = [.. nodes.Values],
                 Relationships = [.. relationships],
                 Measurements = measured,
+                MethodPeaks = peaksChanged ? [.. methodPeaks.Values] : current.MethodPeaks,
                 Loss = [.. loss],
                 Gaps = current.Gaps + (hasGap ? 1 : 0),
                 LastUpdate = clock.GetUtcNow()
@@ -165,6 +169,30 @@ public sealed class SessionStore(TimeProvider clock, ConnectorLimits limits)
     }
 
     private bool IsActive => snapshot?.State is SessionStatus.Connecting or SessionStatus.Live;
+
+    private bool RememberMethodPeaks(IEnumerable<Observation> observations, long start, long end)
+    {
+        var changed = false;
+        foreach (var observation in observations)
+        {
+            if (observation.Value is not { } value || nodes[observation.NodeId].Kind != NodeKind.Method)
+                continue;
+            var key = (observation.NodeId, observation.Metric);
+            if (methodPeaks.TryGetValue(key, out var prior))
+            {
+                var coveredOnly = observation.Metric == Metric.Calls && !observation.Complete;
+                var priorCoveredOnly = observation.Metric == Metric.Calls && !prior.Reading.Complete;
+                var previous = prior.Reading.Value!.Value;
+                if (coveredOnly != priorCoveredOnly ? coveredOnly :
+                    coveredOnly ? value <= previous : value / (end - start) <= previous / (prior.EndMs - prior.StartMs))
+                    continue;
+            }
+
+            methodPeaks[key] = new(observation, start, end);
+            changed = true;
+        }
+        return changed;
+    }
 
     private bool HasValidReferences(ConnectorBatch batch, Dictionary<string, GraphNode> incoming, MetricCapability[] capabilities)
     {

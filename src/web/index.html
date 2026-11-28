@@ -3,58 +3,135 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
     <title>CodeOrganism</title>
   </head>
   <body>
     <header class="topbar">
       <h1>CodeOrganism</h1>
       <p id="source-status" role="status" data-state="connecting">Connecting to the local visualizer</p>
+      <button id="open-settings" type="button" aria-label="Settings" aria-haspopup="dialog">
+        <span aria-hidden="true">⚙︎</span>
+      </button>
     </header>
+    <dialog id="settings" aria-labelledby="settings-title">
+      <div class="settings-heading">
+        <h2 id="settings-title">Settings</h2>
+        <form method="dialog">
+          <button id="close-settings" type="submit" aria-label="Close settings">×</button>
+        </form>
+      </div>
+      <div class="settings-fields">
+        <label for="graphics-quality">Graphics quality</label>
+        <select id="graphics-quality" aria-describedby="graphics-description" autofocus>
+          <option value="low">Low</option>
+          <option value="balanced">Balanced</option>
+          <option value="high">High</option>
+        </select>
+        <p id="graphics-description">Low uses static highlights. Balanced animates pulses and glow. High adds layered halos and brighter nodes.</p>
+        <label for="language">Language</label>
+        <select id="language">
+          <option value="en" lang="en">English</option>
+          <option value="ru" lang="ru">Русский</option>
+        </select>
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="light">White</option>
+          <option value="dark">Dark</option>
+          <option value="purple">Purple</option>
+        </select>
+      </div>
+    </dialog>
     <main>
       <section class="workspace" aria-labelledby="map-title">
         <form id="attach-form" class="attach">
-          <div><label for="process">Process</label><select id="process"><option value="">Loading processes</option></select></div>
+          <div class="process-picker">
+            <label for="process">Process</label>
+            <button id="refresh-processes" type="button" aria-label="Refresh process list" title="Refresh process list" aria-busy="false">
+              <span aria-hidden="true">↻</span>
+            </button>
+            <select id="process"><option value="">Loading processes</option></select>
+          </div>
           <div><label for="pid">Or enter PID</label><input id="pid" type="number" inputmode="numeric" min="1" step="1" /></div>
-          <button id="refresh-processes" type="button">Refresh</button>
           <button id="attach" type="submit" class="primary" disabled>Attach</button>
           <button id="detach" type="button" disabled>Detach</button>
           <p id="control-message" role="status"></p>
         </form>
-        <div class="map-header">
-          <div><h2 id="map-title">Runtime map</h2><p id="metric-caption">CPU activity · milliseconds per second</p></div>
-          <div class="map-controls">
-            <div class="metrics" role="group" aria-label="Map metric">
-              <button id="metric-cpu" type="button" aria-pressed="true">CPU</button>
-              <button id="metric-allocation" type="button" aria-pressed="false" disabled>Allocations</button>
-              <button id="metric-calls" type="button" aria-pressed="false" disabled>Calls</button>
-              <button id="metric-combined" type="button" aria-pressed="false" disabled>Combined</button>
+        <div class="map-area">
+          <div id="map-content">
+            <div class="map-header">
+              <div><h2 id="map-title">Runtime map</h2><p id="metric-caption">CPU activity · milliseconds per second</p></div>
+              <div class="map-controls">
+                <div class="metrics" role="group" aria-label="Map metric">
+                  <button id="metric-cpu" type="button" aria-pressed="true">CPU</button>
+                  <button id="metric-allocation" type="button" aria-pressed="false" disabled>Allocations</button>
+                  <button id="metric-calls" type="button" aria-pressed="false" disabled>Calls</button>
+                  <button id="metric-combined" type="button" aria-pressed="false" disabled>Combined</button>
+                </div>
+                <div class="zoom-controls">
+                  <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+                  <input id="zoom-level" type="text" inputmode="decimal" aria-label="Zoom percentage" value="100%" />
+                  <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+                </div>
+                <button id="reset-view" type="button">Reset view</button>
+                <button id="collapse-all" type="button" disabled>Collapse all</button>
+                <button id="pause" type="button" disabled>Pause</button>
+              </div>
             </div>
-            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
-            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
-            <button id="reset-view" type="button">Reset view</button>
-            <button id="pause" type="button" disabled>Pause</button>
+            <div class="map">
+              <canvas id="runtime-map" tabindex="0" aria-label="Runtime map. Use arrow keys to pan and plus or minus to zoom."></canvas>
+              <p class="empty" id="map-empty">Attach to a running .NET process to see its activity.</p>
+              <div id="fullscreen-panels" hidden></div>
+              <button id="fullscreen-map" type="button" aria-label="Open fullscreen map" title="Open fullscreen map">
+                <span aria-hidden="true">⛶</span>
+              </button>
+              <p id="fullscreen-status" role="status" hidden></p>
+            </div>
+            <p class="legend"><span class="pulse" aria-hidden="true"></span> <span id="metric-legend">Pulse: CPU activity</span> <span class="branch" aria-hidden="true"></span> <span id="branch-legend">Line: observed stack link</span></p>
+          </div>
+          <div id="attach-overlay" hidden inert>
+            <p id="attach-progress" role="status" tabindex="-1"><span class="attach-spinner" aria-hidden="true"></span><span>Connecting to process</span></p>
           </div>
         </div>
-        <div class="map">
-          <canvas id="runtime-map" tabindex="0" aria-label="Runtime map. Use arrow keys to pan and plus or minus to zoom."></canvas>
-          <p class="empty" id="map-empty">Attach to a running .NET process to see its activity.</p>
-        </div>
-        <p class="legend"><span class="pulse" aria-hidden="true"></span> <span id="metric-legend">Pulse: CPU activity</span> <span class="branch" aria-hidden="true"></span> Line: observed stack link</p>
       </section>
       <aside class="inspector" aria-label="Map inspection">
-        <h2 id="ranking-title">Top modules</h2>
-        <div id="ranking-control" hidden><label for="ranking-metric">Rank by</label> <select id="ranking-metric"></select></div>
-        <p id="rank-metric">CPU activity · milliseconds per second</p>
-        <ol id="cpu-ranking"></ol>
-        <p id="coverage" class="coverage"></p>
-        <details id="details">
-          <summary>Inspector</summary>
-          <p id="selection-name">Select a node to inspect it.</p>
-          <dl id="selection-values"></dl>
-        </details>
-        <h3>Groups</h3>
-        <ul id="groups"></ul>
+        <div class="inspection-panel">
+          <button class="panel-move" type="button" aria-label="Move ranking panel with arrow keys" title="Move ranking panel with arrow keys"><span aria-hidden="true">⠿</span></button>
+          <details id="ranking-panel" open>
+            <summary><h2 id="ranking-title">Top modules</h2></summary>
+            <div class="panel-content" role="group" aria-labelledby="ranking-title">
+              <div class="ranking-scope">
+                <label for="ranking-scope">Ranking view</label>
+                <select id="ranking-scope">
+                  <option value="modules">Top modules</option>
+                  <option value="methods">Top methods</option>
+                </select>
+              </div>
+              <div id="ranking-control" hidden><label for="ranking-metric">Rank by</label> <select id="ranking-metric"></select></div>
+              <p id="rank-metric">CPU activity · milliseconds per second</p>
+              <ol id="cpu-ranking" tabindex="0" aria-labelledby="ranking-title"></ol>
+              <p id="coverage" class="coverage"></p>
+            </div>
+          </details>
+        </div>
+        <div class="inspection-panel">
+          <button class="panel-move" type="button" aria-label="Move inspector panel with arrow keys" title="Move inspector panel with arrow keys"><span aria-hidden="true">⠿</span></button>
+          <details id="details">
+            <summary><h2 id="inspector-title">Inspector</h2></summary>
+            <div class="panel-content" role="group" aria-labelledby="inspector-title">
+              <p id="selection-name">Select a node to inspect it.</p>
+              <dl id="selection-values"></dl>
+            </div>
+          </details>
+        </div>
+        <div class="inspection-panel">
+          <button class="panel-move" type="button" aria-label="Move groups panel with arrow keys" title="Move groups panel with arrow keys"><span aria-hidden="true">⠿</span></button>
+          <details id="groups-panel" open>
+            <summary><h2 id="groups-title">Groups</h2></summary>
+            <div class="panel-content" role="group" aria-labelledby="groups-title">
+              <ul id="groups" tabindex="0" aria-labelledby="groups-title"></ul>
+            </div>
+          </details>
+        </div>
       </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>

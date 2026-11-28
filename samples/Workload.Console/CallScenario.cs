@@ -15,8 +15,15 @@ public static class CallScenario
     private static EntryCounters.Counter throwing = null!;
 #endif
 
-    public static async Task RunAsync()
+    public static async Task<int> RunAsync(bool repeat)
     {
+#if !CALL_PROBES
+        if (repeat)
+        {
+            Console.Error.WriteLine("Build with -p:EnableCallProbes=true to run the repeating call workload.");
+            return 2;
+        }
+#endif
 #if CALL_PROBES
         await using var counters = new EntryCounters();
         concurrent = Register(nameof(ConcurrentEntry));
@@ -27,17 +34,31 @@ public static class CallScenario
             .GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!);
 #endif
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { pid = Environment.ProcessId, ready = true }));
+        if (repeat)
+        {
+            for (var phase = 0; ; phase ^= 1)
+            {
+                RunCalls(phase == 0 ? 4_000 : 20_000);
+                await Task.Delay(1_000);
+            }
+        }
         while (await Console.In.ReadLineAsync() is { } command)
         {
             if (!int.TryParse(command, out var loops) || loops <= 0) break;
 
             var start = Stopwatch.GetTimestamp();
-            Parallel.For(0, 4, _ =>
-            {
-                for (var i = 0; i < loops; i++) ConcurrentEntry(i);
-            });
+            RunCalls(loops);
             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { elapsedMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds }));
         }
+        return 0;
+    }
+
+    private static void RunCalls(int loops)
+    {
+        Parallel.For(0, 4, _ =>
+        {
+            for (var i = 0; i < loops; i++) ConcurrentEntry(i);
+        });
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

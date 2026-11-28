@@ -62,7 +62,7 @@ A connector author sends an observed graph and a supported metric to the same in
 - **FR-004**: Keep discovered topology available throughout a session. Use gradual visual decay after spikes and keep positions stable during metric-only updates.
 - **FR-005**: Show CPU attributed to code, estimated managed allocation rate, and method entry count and rate for the scope of the supported exact mode. A stack appearance count cannot serve as CPU time or method entry count.
 - **FR-006**: Map CPU to pulse, allocation rate to node size and call rate to glow. Allow individual views and a combined view. Provide text values and a legend for interpretation.
-- **FR-007**: Provide a ranked view by available metric, selection shared with the map, and a collapsible inspector with values, units, time window, measurement method, coverage and data quality.
+- **FR-007**: Provide a ranked view by available metric, selection shared with the map, and a collapsible Inspector with current values, units and time window. Show CPU and allocation estimates or incomplete coverage alongside the reading and document their measurement methods in the quickstart. Keep call measurement method and coverage in the Inspector. Rank measured methods by their session peaks.
 - **FR-008**: Pause and navigate a fixed snapshot while collection continues. Resume at the current live state. Provide a separate detach control.
 - **FR-009**: Keep captured telemetry in memory. Show source state and mark known measurement loss. Distinguish unavailable readings, zero values and approximate or exact readings.
 - **FR-010**: Publish CodeOrganism under MIT with local usage and connector documentation.

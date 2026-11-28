@@ -1,9 +1,9 @@
+import { number, t } from "../language";
 import type { Measurement } from "./layout";
 
 export const metricIds = ["cpu", "allocation", "calls"] as const;
 export type MetricId = typeof metricIds[number];
 export type MapMode = MetricId | "combined";
-const format = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 export const metricDetails = {
   cpu: {
@@ -13,7 +13,7 @@ export const metricDetails = {
     missing: "No attributed CPU in this interval.",
     unresolved: "Some CPU samples could not be attributed.",
     strength: (perSecond: number) => Math.sqrt(perSecond / 1_000),
-    formatRate: (perSecond: number) => `${format.format(perSecond)} ms/s`
+    formatRate: (perSecond: number) => `${number(perSecond)} ${t("ms/s")}`
   },
   allocation: {
     label: "Allocation rate",
@@ -31,7 +31,7 @@ export const metricDetails = {
     missing: "No covered method entries in this interval.",
     unresolved: "Some calls could not be attributed.",
     strength: (perSecond: number) => Math.log1p(perSecond) / Math.log1p(50_000),
-    formatRate: (perSecond: number) => `${format.format(perSecond)} calls/s`
+    formatRate: (perSecond: number) => `${number(perSecond)} ${t("calls/s")}`
   }
 } satisfies Record<MetricId, {
   label: string; description: string; legend: string; missing: string; unresolved: string;
@@ -43,23 +43,23 @@ export function toRate(value: number, interval: number) {
 }
 
 export function displayedRate(row: Measurement | undefined, metric: MetricId, interval: number) {
-  if (row?.value == null || interval <= 0) return "Unavailable";
-  if (metric === "calls" && !row.complete) return `${format.format(row.value)} covered calls`;
+  if (row?.value == null || interval <= 0) return t("Unavailable");
+  if (metric === "calls" && !row.complete) return `${number(row.value)} ${t("covered calls")}`;
   return metricDetails[metric].formatRate(toRate(row.value, interval));
 }
 
 export function methodLabel(value: string) {
   switch (value) {
-    case "windows-etw-on-cpu-sampling": return "Windows ETW CPU sampling";
-    case "dotnet-eventpipe-allocation-ticks": return ".NET EventPipe allocation ticks";
-    case "dotnet-eventpipe-entry-checkpoints": return ".NET entry checkpoints";
+    case "windows-etw-on-cpu-sampling": return t("Windows ETW CPU sampling");
+    case "dotnet-eventpipe-allocation-ticks": return t(".NET EventPipe allocation ticks");
+    case "dotnet-eventpipe-entry-checkpoints": return t(".NET entry checkpoints");
     default: return value;
   }
 }
 
 function formatBytes(value: number) {
-  if (value >= 1024 ** 3) return `${format.format(value / 1024 ** 3)} GiB/s`;
-  if (value >= 1024 ** 2) return `${format.format(value / 1024 ** 2)} MiB/s`;
-  if (value >= 1024) return `${format.format(value / 1024)} KiB/s`;
-  return `${format.format(value)} B/s`;
+  if (value >= 1024 ** 3) return `${number(value / 1024 ** 3)} ${t("GiB/s")}`;
+  if (value >= 1024 ** 2) return `${number(value / 1024 ** 2)} ${t("MiB/s")}`;
+  if (value >= 1024) return `${number(value / 1024)} ${t("KiB/s")}`;
+  return `${number(value)} ${t("B/s")}`;
 }

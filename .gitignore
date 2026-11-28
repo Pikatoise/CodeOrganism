@@ -13,6 +13,7 @@ coverage/
 playwright-report/
 test-results/
 *.log
+build/
 
 # Local configuration and tools
 .env
@@ -23,3 +24,5 @@ test-results/
 .dotnet/
 Thumbs.db
 .DS_Store
+*.tmp
+*.swp

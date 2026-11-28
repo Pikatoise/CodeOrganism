@@ -25,6 +25,7 @@ test("published bundle serves local assets and attaches outside the repository",
   await page.getByRole("button", { name: "Attach", exact: true }).click();
   await expect(page.locator("#source-status")).toContainText("Live", { timeout: 15_000 });
   await page.locator("#groups").getByRole("button", { name: /Workload.Console/ }).click();
+  await page.getByLabel("Ranking view").selectOption("methods");
   await expect(page.locator("#cpu-ranking button").first()).toContainText(/Busy(?:Alpha|Beta)/);
   await page.getByRole("button", { name: "Detach", exact: true }).click();
   await expect(page.locator("#source-status")).toHaveText("Detached", { timeout: 10_000 });
